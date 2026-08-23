@@ -29,6 +29,13 @@
   --error-container:#F9DEDC;    --on-error-container:#410E0B;
   --success:#3B6939;            --success-container:#BCF0B4;
 
+  /* --- rating ramp 0-10: muted rose-red (needs work) → teal-green (done). Kept inside the
+         purple scheme's temperature so the wheel reads as part of the app, not a pasted-in
+         traffic-light palette. --- */
+  --rate-0:#9E3049;  --rate-1:#A8443F;  --rate-2:#AE5A38;  --rate-3:#AE7033;
+  --rate-4:#A78432;  --rate-5:#9A9138;  --rate-6:#849642;  --rate-7:#6C9750;
+  --rate-8:#52955F;  --rate-9:#3B9070;  --rate-10:#2E8A80;
+
   /* --- state-layer strengths (MD3 overlays opacity, it does not shift hue) --- */
   --sl-hover:.08; --sl-focus:.10; --sl-press:.12;
 
@@ -68,6 +75,12 @@
     --error:#F2B8B5;              --on-error:#601410;
     --error-container:#8C1D18;    --on-error-container:#F9DEDC;
     --success:#A1D399;            --success-container:#20512A;
+
+    /* Lifted well up the tone scale for the dark surface — the light-mode ramp goes muddy
+       against #141218 and white wheel labels stop reading. */
+    --rate-0:#E58AA0;  --rate-1:#EA9A8E;  --rate-2:#ECA982;  --rate-3:#E9B87D;
+    --rate-4:#E0C47E;  --rate-5:#D2CE86;  --rate-6:#BCD292;  --rate-7:#A3D3A0;
+    --rate-8:#8AD1AE;  --rate-9:#75CCBD;  --rate-10:#6BC6C9;
 
     --sl-hover:.10; --sl-focus:.12; --sl-press:.16;
     --e1:0 1px 3px rgba(0,0,0,.40);
@@ -359,17 +372,21 @@ textarea.notes::placeholder{color:var(--on-surface-variant); opacity:.72;}
   background:var(--land,var(--primary)); opacity:0;
   transition:opacity var(--d-slow) var(--ease); pointer-events:none;}
 .wheelbox.landed::before{opacity:.30;}
-/* On the dark surface the same glow reads as a muddy wash behind the whole wheel rather than
-   a highlight behind one wedge, so it comes down to a hint. */
+.wheel path{fill-opacity:.88; stroke:var(--surface-container); stroke-width:1.5;
+  transition:fill-opacity var(--d-slow) var(--ease);}
+.wheel path.won{fill-opacity:1; stroke-width:2.5;}
+.wheel path.dim{fill-opacity:.32;}
+.wlabel{font-size:10.5px; font-weight:500; fill:#fff; letter-spacing:.2px;
+  paint-order:stroke; stroke:rgba(0,0,0,.32); stroke-width:2.6px;}
+.cdot{stroke:var(--surface-container); stroke-width:1.5;}
+/* On the dark surface the landed glow reads as a muddy wash behind the whole wheel rather
+   than a highlight behind one wedge, so it comes down to a hint; and the pastel dark-mode
+   wedges need dark ink on a light halo instead of the reverse. */
 @media (prefers-color-scheme: dark){
   .wheelbox.landed::before{opacity:.16;}
   .wheel path.dim{fill-opacity:.42;}
+  .wlabel{fill:#171320; stroke:rgba(255,255,255,.5); stroke-width:2.8px;}
 }
-.wheel path{fill-opacity:.82; transition:fill-opacity var(--d-slow) var(--ease);}
-.wheel path.won{fill-opacity:1;}
-.wheel path.dim{fill-opacity:.3;}
-.wlabel{font-size:10.5px; font-weight:500; fill:#fff; letter-spacing:.2px;
-  paint-order:stroke; stroke:rgba(0,0,0,.32); stroke-width:2.6px;}
 .whub{fill:var(--surface-container); stroke:none;}
 .wring{fill:none; stroke:var(--outline-variant); stroke-width:1;}
 .wneedle{fill:var(--on-surface); stroke:var(--surface); stroke-width:2; stroke-linejoin:round;}

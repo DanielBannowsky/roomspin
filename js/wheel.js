@@ -47,8 +47,11 @@ function wheelSvg(odds,rotation,landedId){
       : wedgePath(c,c,r,inner,w.a0,w.a1);
     const won = landedId && w.id===landedId;
     const dim = landedId && !won;
-    return `<path class="${won?"won":dim?"dim":""}" d="${path}" fill="${col}"
-      stroke="var(--surface-container)" stroke-width="${won?2.5:1.5}" fill-rule="evenodd"/>`;
+    // fill/stroke go through style rather than presentation attributes: presentation
+    // attributes taking var() is well supported in Blink but patchier elsewhere, and a
+    // silently-unresolved token here would paint the whole wheel black.
+    return `<path class="${won?"won":dim?"dim":""}" d="${path}"
+      style="fill:${col}" fill-rule="evenodd"/>`;
   }).join("");
   // When a result is showing, label only the winner — the dimmed slices' names are noise at
   // that point, and the winner's label stays legible even if its wedge is a thin one.

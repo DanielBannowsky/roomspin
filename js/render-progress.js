@@ -84,7 +84,7 @@ function houseChart(dates){
       ${grid}
       <path d="${area}" class="carea"/>
       <path d="${dstr}" class="cline"/>
-      <circle cx="${x(pts.length-1).toFixed(1)}" cy="${y(last.v).toFixed(1)}" r="3.4" fill="${ratingColor(last.v)}" stroke="var(--surface-container)" stroke-width="1.5"/>
+      <circle class="cdot" cx="${x(pts.length-1).toFixed(1)}" cy="${y(last.v).toFixed(1)}" r="3.4" style="fill:${ratingColor(last.v)}"/>
     </svg>
     <div class="chartfoot"><span>${prettyDate(pts[0].d)}</span><span>${prettyDate(last.d)}</span></div>
   </div>`;

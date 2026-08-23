@@ -5,12 +5,15 @@
 const APP_VERSION = "v1";
 const KEY = "roomspin-v1";
 
-/* Rating 0-10 → colour. Index = rating, so RATING_COLORS[r] is direct. Material You is a
-   colourful, expressive system, so this ramp is saturated rather than muted — but it stays
-   semantic (needs-work red through to done teal-green) because the colour is carrying real
-   information here, not decoration. */
-const RATING_COLORS = ["#B3261E","#C13A21","#CC5522","#D2701F","#D08B18","#C4A410",
-  "#A9B41B","#86B62F","#5FB24C","#35A96A","#00997E"];
+/* Rating 0-10 → colour, as design tokens rather than literals: the actual values live in
+   styles.css next to every other colour in the system, which is what lets the ramp restyle
+   itself for dark mode without JS knowing anything about the theme. Index = rating, so
+   RATING_COLORS[r] is direct.
+
+   The ramp is deliberately muted and runs rose-red → teal-green rather than fire-engine red →
+   grass green: it still reads semantically (bad on the left, done on the right) but the cool
+   cast at both ends sits inside the app's purple scheme instead of fighting it. */
+const RATING_COLORS = Array.from({length:11},(_,i)=>`var(--rate-${i})`);
 
 /* Weighted-spin bias. weight = (11 - rating) ** bias, so a 1/10 room is always more likely
    than a 9/10 one; the exponent controls by how much. bias 0 makes every room equally likely

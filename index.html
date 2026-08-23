@@ -13,12 +13,10 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" href="icon-192.png">
-<!-- Roboto is the canonical Material typeface. Loaded async and non-blocking: if the network
-     is gone (this is an offline-capable PWA) the local stack in styles.css takes over and the
-     app still paints — the font is a finish, not a dependency. -->
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" media="print" onload="this.media='all'">
+<!-- No webfont request. Roboto is Material's typeface and is already present on Android; on
+     other platforms the system font takes over. Fetching it from Google would hand every
+     visitor's IP and user-agent to a third party on page load, which is not a trade worth
+     making for a font on a page that is otherwise entirely self-contained and offline-capable. -->
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
