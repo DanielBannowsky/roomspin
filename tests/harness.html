@@ -562,6 +562,22 @@ const task=(id,over)=>Object.assign({id, text:id, done:false, doneAt:null,
     ok("sync: retried write reached the remote", remoteFile.rooms.find(r=>r.id===kid).rating===7,
        "remote="+remoteFile.rooms.find(r=>r.id===kid).rating+" local="+roomById(kid).rating+" puts="+puts);
 
+    // Returning to the foreground must pull her changes without anyone tapping anything —
+    // resuming an installed PWA does not reload the page, so this is the only trigger that
+    // fires in that case.
+    {
+      const kid2=kid;
+      remoteFile.rooms=remoteFile.rooms.map(r=> r.id===kid2
+        ? {...r, notes:"edited while my app sat open", updatedAt:(remoteFile.clock||Date.now())+9000}
+        : r);
+      remoteFile.clock=(remoteFile.clock||Date.now())+9000;
+      const cfgNow=syncConfig(); cfgNow.lastSync=Date.now()-60000; saveSyncConfig(cfgNow);
+      document.dispatchEvent(new Event("visibilitychange"));
+      await new Promise(r=>setTimeout(r,120));
+      ok("sync: foreground refresh pulls her change with no tap",
+         roomById(kid2).notes==="edited while my app sat open", roomById(kid2).notes);
+    }
+
     // Disconnecting must leave the local copy intact and stop touching the network.
     const before=puts;
     disconnectSync();

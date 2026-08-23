@@ -80,6 +80,21 @@ revert on github.com.
 The second person repeats step 2 with their own token — the repo owner grants access by adding
 them as a collaborator on the private repo.
 
+**When it syncs.** Automatically — the button is only a manual override:
+
+| Trigger | When |
+| --- | --- |
+| App opened (cold start) | every launch |
+| App returns to the foreground | resuming from the app switcher, if the last sync was over 20s ago |
+| Any edit | ~1.6s after you stop editing, so a burst of changes becomes one commit |
+| Connectivity returns | as soon as the device is back online |
+| **Sync now** | when you want to force it |
+
+Each sync is a single read-merge-write, so it pulls and pushes at the same time. The one case
+that still needs a tap is both apps sitting open on screen at once — there is no live push, so
+her change lands on your screen when your app next foregrounds, when you next edit, or when you
+hit **Sync now**.
+
 **About the token.** It is stored only in that browser's `localStorage`, is deliberately kept
 out of `store` so it can never ride along in a downloaded backup, and is never sent anywhere
 except `api.github.com`. Two things worth knowing: anyone with the phone unlocked can read it,

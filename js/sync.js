@@ -287,3 +287,16 @@ function disconnectSync(){
 /* Retry as soon as connectivity returns, so an edit made on the drive home lands without
    anyone having to remember to reopen the app. */
 window.addEventListener("online", ()=>{ if(isSynced()){ syncNow({quiet:true}).then(()=>render()); } });
+
+/* Refresh when the app comes back to the foreground. This is the trigger that actually matters
+   on a phone: resuming an installed PWA from the app switcher does NOT reload the page, so the
+   boot sync never runs again for the entire life of the app. Without this, one person could
+   leave Roomspin open for days and never see the other's changes.
+   The cooldown keeps app-switching from turning into a burst of API calls. */
+const FOREGROUND_COOLDOWN = 20000;
+document.addEventListener("visibilitychange", ()=>{
+  if(document.visibilityState!=="visible" || !isSynced() || sync.busy) return;
+  const c=syncConfig();
+  if(c && c.lastSync && Date.now()-c.lastSync < FOREGROUND_COOLDOWN) return;
+  syncNow({quiet:true}).then(()=>render());
+});
