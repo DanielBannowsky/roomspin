@@ -56,6 +56,50 @@ shows the exact odds for your actual house.
 Ratings move in **half points** via the slider, and fractional ratings feed straight into the
 weighting — a 6.5 sits properly between a 6 and a 7 on the wheel.
 
+## Sharing a house between two people
+
+Optional, off by default. A device that never connects stays entirely local and makes no
+network requests at all, so the public build still works for anyone who opens the link.
+
+The shared house is a single JSON file in a **private** GitHub repo, written through the
+contents API. No extra service, no server, no third-party JavaScript — and because every write
+is an ordinary commit, the shared house gets full version history that you can browse and
+revert on github.com.
+
+**Setup, once per person:**
+
+1. Make a **private** repo to hold the data (it must not be the same repo as this app).
+2. Create a **fine-grained** personal access token at
+   *Settings → Developer settings → Personal access tokens → Fine-grained tokens*:
+   - **Repository access:** Only select repositories → the private data repo
+   - **Permissions:** Repository permissions → **Contents: Read and write** (nothing else)
+   - Set an expiry
+3. In the app: **Data → Shared house**, enter the owner, repo name, file path
+   (`roomspin.json` is fine), and the token. Tap **Connect**.
+
+The second person repeats step 2 with their own token — the repo owner grants access by adding
+them as a collaborator on the private repo.
+
+**About the token.** It is stored only in that browser's `localStorage`, is deliberately kept
+out of `store` so it can never ride along in a downloaded backup, and is never sent anywhere
+except `api.github.com`. Two things worth knowing: anyone with the phone unlocked can read it,
+and all of a user's GitHub Pages sites share one origin (`<user>.github.io`), so a scripting
+flaw in *any* site you host there could read it. That is exactly why the instructions insist on
+a fine-grained, single-repo, expiring token: the blast radius is then one private data repo.
+
+**How conflicts resolve.** Per field, not per document. Every room and every task carries its
+own `updatedAt`, and deletions leave tombstones, so one of you ticking a checklist item while
+the other re-rates the same room keeps both changes. Only a genuine edit to the same field is
+resolved by "later wins".
+
+Stamps come from a hybrid logical clock rather than `Date.now()` directly: each stamp is forced
+to exceed every stamp that device has seen, including ones that arrived from the other phone.
+Without that, whichever phone's clock ran fast would silently win every conflict until the
+other caught up.
+
+**Resetting.** "Reset all data" on a connected device wipes the shared house for *both* of you
+on the next sync. Disconnect first if you only mean to reset your own phone.
+
 ## Layout
 
 ```
@@ -71,6 +115,7 @@ js/spin.js              spin animation and landing maths
 js/render-*.js          one file per tab, each returning an HTML string
 js/wire.js              event handlers, re-attached after every render
 js/io.js                backup / restore / clipboard summary
+js/sync.js              shared-house sync: GitHub client + the per-field merge
 tests/harness.html      test suite — see below
 ```
 
@@ -81,11 +126,17 @@ insertion so the CSS transition has a from-value.
 
 ## Tests
 
-`tests/harness.html` loads the real application files and runs ~150 assertions covering the
+`tests/harness.html` loads the real application files and runs ~200 assertions covering the
 weighting maths (including a 60,000-draw distribution check), wheel geometry, the week
 lifecycle, corrupt/hand-edited storage, import validation, HTML escaping, every tab's render
-in every notable state, and the wired-up controls. It also asserts every interactive control
-meets a 44px touch target — that check is what caught a field that had been left unstyled.
+in every notable state, and the wired-up controls. Sync gets its own block: merge scenarios
+for two devices, clock skew, and a full cycle driven against a stubbed GitHub API including a
+409 retry and disconnect.
+
+Two of the checks exist because they caught real bugs and are cheap to keep: every interactive
+control must meet a 44px touch target (which found a field left unstyled after a refactor), and
+no rendered tab may contain the string `undefined` (which found a missing icon key rendering
+into the page instead of throwing).
 
 Serve the repo and open `http://localhost:8765/tests/harness.html`. Green means all passed;
 any failure is printed at the top with the offending values.
