@@ -1,1 +1,7 @@
 .DS_Store
+
+# Personal screenshots / scratch dropped into the working copy. This repo is public —
+# keep house data and to-do lists out of it. The shared house lives in the private sync repo.
+image*.png
+*.local.json
+roomspin-seed*.json
