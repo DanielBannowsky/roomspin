@@ -33,6 +33,7 @@
 <header class="appbar">
   <span class="appicon" aria-hidden="true"></span>
   <h1>Roomspin</h1>
+  <span class="syncstat" id="syncTag" hidden aria-hidden="true"></span>
   <span class="scorepill" id="scoreTag">—</span>
   <span class="rev" id="verTag"></span>
 </header>
@@ -56,11 +57,16 @@
 <script src="js/render-progress.js"></script>
 <script src="js/render-settings.js"></script>
 <script src="js/io.js"></script>
+<script src="js/sync.js"></script>
 <script src="js/wire.js"></script>
 <script>
 "use strict";
 /* ============================ boot ============================ */
 load(); render();
+/* If this device has been connected to a shared house it always opens that house: render the
+   local copy first so the app is usable instantly and offline, then reconcile in the
+   background. Devices that never connected stay purely local and never touch the network. */
+if(isSynced()) syncNow({quiet:true}).then(()=>render());
 if("serviceWorker" in navigator){
   window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));
 }

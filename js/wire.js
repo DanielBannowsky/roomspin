@@ -44,10 +44,10 @@ function wire(){
     const r=ctxRoom(); if(!r) return;
     const v=e.target.value.trim();
     if(v) r.name=v; else e.target.value=r.name;   // refuse to blank a room's name
-    save(); render();
+    touchRoom(r); save(); render();
   };
   const notesEl=$("#roomNotes");
-  if(notesEl) notesEl.onchange=e=>{ const r=ctxRoom(); if(r){ r.notes=e.target.value; save(); } };
+  if(notesEl) notesEl.onchange=e=>{ const r=ctxRoom(); if(r){ r.notes=e.target.value; touchRoom(r); save(); } };
 
   // ---- rating ----
   all("[data-rate]").forEach(b=>b.onclick=()=>{
@@ -103,7 +103,7 @@ function wire(){
   });
 
   const sn=$("#snoozeRoom");
-  if(sn) sn.onclick=()=>{ const r=ctxRoom(); if(!r) return; r.snoozed=!r.snoozed; save(); render(); };
+  if(sn) sn.onclick=()=>{ const r=ctxRoom(); if(!r) return; r.snoozed=!r.snoozed; touchRoom(r); save(); render(); };
   const dr=$("#delRoom");
   if(dr) dr.onclick=()=>{
     const r=ctxRoom(); if(!r) return;
@@ -138,7 +138,7 @@ function wire(){
   if(aw) aw.onclick=()=>{
     // Voiding throws the week away without writing a history row — an abandoned week shouldn't
     // show up as a 0-point result and drag the "points gained" total down.
-    if(ui.resetConfirm){ store.week=null; save(); ui.resetConfirm=false; flash("Week voided"); }
+    if(ui.resetConfirm){ store.week=null; touchWeek(); save(); ui.resetConfirm=false; flash("Week voided"); }
     else ui.resetConfirm=true;
     render();
   };
@@ -174,16 +174,16 @@ function wire(){
   };
 
   // ---- data tab ----
-  all("[data-bias]").forEach(b=>b.onclick=()=>{ store.settings.bias=Number(b.dataset.bias); save(); render(); });
+  all("[data-bias]").forEach(b=>b.onclick=()=>{ store.settings.bias=Number(b.dataset.bias); touchSettings(); save(); render(); });
   all("[data-weeklen]").forEach(b=>b.onclick=()=>{
     store.settings.weekLength=clamp(store.settings.weekLength+Number(b.dataset.weeklen),1,60);
     // Keep a running week's end date consistent with the new length — otherwise the setting
     // appears to do nothing until the next spin.
-    if(store.week) store.week.endDate=addDays(store.week.startDate, store.settings.weekLength);
-    save(); render();
+    if(store.week){ store.week.endDate=addDays(store.week.startDate, store.settings.weekLength); touchWeek(); }
+    touchSettings(); save(); render();
   });
   const tr=$("#toggleRepeat");
-  if(tr) tr.onclick=()=>{ store.settings.avoidRepeat=!store.settings.avoidRepeat; save(); render(); };
+  if(tr) tr.onclick=()=>{ store.settings.avoidRepeat=!store.settings.avoidRepeat; touchSettings(); save(); render(); };
   const bb=$("#backupBtn"); if(bb) bb.onclick=doBackup;
   const cb=$("#copyBtn"); if(cb) cb.onclick=doCopy;
   const ib=$("#importBtn"); if(ib) ib.onclick=()=>document.getElementById("importer").click();
@@ -191,6 +191,29 @@ function wire(){
   const xi=$("#cancelImport"); if(xi) xi.onclick=()=>{ ui.pendingImport=null; render(); };
   const ra=$("#resetAll");
   if(ra) ra.onclick=()=>{ if(ui.resetConfirm) resetAll(); else { ui.resetConfirm=true; render(); } };
+
+  // ---- shared house ----
+  // The four inputs write to a draft rather than straight to config: re-rendering on every
+  // keystroke would blur the field, and a half-typed token must never be saved anywhere.
+  ["Owner","Repo","Path","Token"].forEach(f=>{
+    const el=$("#sync"+f);
+    if(el) el.oninput=e=>{ ui.syncDraft={...(ui.syncDraft||{}), [f.toLowerCase()]:e.target.value}; };
+  });
+  const sc=$("#syncConnect");
+  if(sc) sc.onclick=async()=>{
+    const d=ui.syncDraft||{};
+    sync.busy=true; setSyncStatus("syncing","Connecting…"); render();
+    try{
+      await connectSync({owner:d.owner||"", repo:d.repo||"", path:d.path||"roomspin.json", token:d.token||""});
+      ui.syncDraft=null;
+      flash("Shared house connected");
+    }catch(err){
+      setSyncStatus("error", String(err.message||err));
+    }finally{ sync.busy=false; render(); }
+  };
+  const sn2=$("#syncNow"); if(sn2) sn2.onclick=()=>syncNow();
+  const so=$("#syncOff");
+  if(so) so.onclick=()=>{ disconnectSync(); flash("Disconnected — this device is local again"); render(); };
 }
 
 /* Mid-drag repaint, DOM-only. Deliberately not a render() — re-rendering while a range input

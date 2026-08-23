@@ -64,15 +64,14 @@ document.getElementById("importer").onchange=e=>{
 function applyImport(){
   const d=ui.pendingImport?.data; if(!d) return;
   store=deepMerge(freshDefaults(),d);
-  if(!Array.isArray(store.rooms)) store.rooms=[];
-  if(!Array.isArray(store.history)) store.history=[];
-  store.rooms.forEach(r=>{
-    if(!Array.isArray(r.tasks)) r.tasks=[];
-    if(!Array.isArray(r.ratingLog)) r.ratingLog=[{date:r.createdAt||todayStr(), rating:r.rating??5}];
-    r.rating=snapRating(r.rating);
-    if(!r.id) r.id=uid();
-  });
-  if(store.week && !roomById(store.week.roomId)) store.week=null;
+  store.rooms=(store.rooms||[]).map(r=>({...r, id:r.id||uid()}));
+  normalizeStore();
+  // A restored backup is a deliberate wholesale replacement, so stamp everything as "now" —
+  // otherwise the merge would treat a restored 2-year-old house as stale and the shared copy
+  // would immediately undo the restore.
+  const t=Date.now();
+  store.rooms.forEach(r=>{ r.updatedAt=t; (r.tasks||[]).forEach(x=>{ x.updatedAt=t; }); });
+  store.settingsUpdatedAt=t; store.weekUpdatedAt=t;
   store.seeded=true;
   ui.pendingImport=null; ui.openRoomId=null; resetSpin();
   save(); flash("Backup restored"); render();

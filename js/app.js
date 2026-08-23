@@ -7,6 +7,15 @@ function render(){
   const hs=houseScore();
   document.getElementById("scoreTag").textContent = hs==null ? "—" : `${fmtScore(hs)} / 10`;
   document.getElementById("verTag").textContent = APP_VERSION;
+  // Header indicator: only present once this device is connected, so the app looks and
+  // behaves exactly as before for anyone using the public build without sync.
+  const sd=document.getElementById("syncTag");
+  if(sd){
+    const on=isSynced();
+    sd.hidden=!on;
+    sd.className="syncstat "+(on?sync.status:"");
+    sd.title=on?(sync.detail||"Shared house"):"";
+  }
   let body;
   if(ui.tab==="rooms") body=renderRooms();
   else if(ui.tab==="spin") body=renderSpin();

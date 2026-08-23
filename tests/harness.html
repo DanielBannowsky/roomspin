@@ -19,9 +19,11 @@
 <script src="../js/render-progress.js"></script>
 <script src="../js/render-settings.js"></script>
 <script src="../js/io.js"></script>
+<script src="../js/sync.js"></script>
 <script src="../js/wire.js"></script>
-<script>
+<script type="module">
 const log=[]; let fails=0;
+async function main(){
 function ok(name,cond,extra){ if(cond) log.push("PASS  "+name); else { fails++; log.push("FAIL  "+name+(extra?"  :: "+extra:"")); } }
 function tryIt(name,fn){ try{ fn(); log.push("PASS  "+name); }catch(e){ fails++; log.push("FAIL  "+name+" :: "+e.message+"\n"+e.stack); } }
 
@@ -313,6 +315,29 @@ ok("Start-the-week uses the landed room", store.week && store.week.roomId===stor
 ok("starting a week moves you to the Week tab", ui.tab==="week");
 store.week=null; resetSpin();
 
+// --- no template hole should reach the screen ---
+localStorage.clear(); load();
+{
+  const gg=store.rooms[0];
+  addTask(gg,"a task"); startWeek(gg);
+  const views=[["rooms",null],["spin",null],["week",null],["progress",null],["settings",null],["rooms",gg.id]];
+  views.forEach(([t,openId])=>{
+    ui.tab=t; ui.openRoomId=openId; ui.oddsOpen=true; render();
+    const html=$main.innerHTML;
+    const holes=["undefined","[object Object]","NaN","null%"].filter(h=>html.includes(h));
+    ok("no template holes on "+t+(openId?" (detail)":""), holes.length===0, holes.join(", "));
+  });
+  // and the sync panel in both of its states
+  ui.tab="settings"; ui.openRoomId=null; render();
+  ok("sync setup form renders whole", !$main.innerHTML.includes("undefined"));
+  saveSyncConfig({owner:"o",repo:"r",path:"p.json",token:"t",lastSync:Date.now()});
+  render();
+  ok("connected sync panel renders whole", !$main.innerHTML.includes("undefined"));
+  ok("connected panel does not print the token", !$main.innerHTML.includes(">t<") && !$main.innerHTML.includes('value="t"'));
+  clearSyncConfig();
+  store.week=null; ui.oddsOpen=false;
+}
+
 // --- every interactive control must be styled and hit a 44px touch target ---
 // Catches the whole class of "markup migrated everywhere except here" bugs: a control that
 // lost its class renders at the browser default (~20px) instead of the design system's size,
@@ -334,6 +359,221 @@ addTask(g,"a task"); startWeek(g);
   ok("no unstyled controls on the "+t+" tab", unstyled.length===0, unstyled.join(" | "));
 });
 store.week=null; ui.openRoomId=null;
+
+
+// ============================ shared house (sync) ============================
+// The merge is a pure function, so these drive it directly with two hand-built "devices"
+// rather than going through the network.
+const T0=Date.now()-60000, T1=T0+1000, T2=T0+2000;
+function applyMergedForTest(m){ store=deepMerge(freshDefaults(), m); normalizeStore(); save(); }
+function dev(over){
+  return Object.assign({version:1, seeded:true, settings:{bias:2,weekLength:7,avoidRepeat:true},
+    settingsUpdatedAt:0, week:null, weekUpdatedAt:0, history:[],
+    graveyard:{rooms:{},tasks:{}}, rooms:[]}, over||{});
+}
+const room=(id,over)=>Object.assign({id, name:id, rating:5, tasks:[], notes:"", snoozed:false,
+  createdAt:"2026-01-01", ratingLog:[{date:"2026-01-01",rating:5}], updatedAt:T0}, over||{});
+const task=(id,over)=>Object.assign({id, text:id, done:false, doneAt:null,
+  createdAt:"2026-01-01", updatedAt:T0}, over||{});
+
+// 1. Concurrent edits to *different* fields of the same room must both survive — this is the
+//    whole reason the merge is per-field rather than last-document-wins.
+{
+  const mine =dev({rooms:[room("kitchen",{rating:4, updatedAt:T1,
+                    tasks:[task("t1",{done:true, doneAt:"2026-02-02", updatedAt:T1})]})]});
+  const hers =dev({rooms:[room("kitchen",{notes:"paint = Alabaster", updatedAt:T2,
+                    tasks:[task("t1"), task("t2",{updatedAt:T2})]})]});
+  const m=mergeStores(mine,hers);
+  const k=m.rooms.find(r=>r.id==="kitchen");
+  ok("merge: her later room edit wins the room fields", k.notes==="paint = Alabaster");
+  ok("merge: my ticked task survives her concurrent edit", k.tasks.find(t=>t.id==="t1").done===true);
+  ok("merge: her new task survives too", !!k.tasks.find(t=>t.id==="t2"));
+  ok("merge: no duplicate tasks", k.tasks.length===2, k.tasks.length);
+}
+
+// 2. Same field on both sides: later stamp wins, in both directions.
+{
+  const a=dev({rooms:[room("bath",{rating:3, updatedAt:T1})]});
+  const b=dev({rooms:[room("bath",{rating:9, updatedAt:T2})]});
+  ok("merge: later rating wins (a,b)", mergeStores(a,b).rooms[0].rating===9);
+  ok("merge: later rating wins (b,a)", mergeStores(b,a).rooms[0].rating===9);
+}
+
+// 3. Deletions stick rather than being resurrected by the other device's stale copy.
+{
+  const deleter=dev({graveyard:{rooms:{garage:T2},tasks:{}}, rooms:[]});
+  const holder =dev({rooms:[room("garage",{updatedAt:T1})]});
+  ok("merge: deleted room stays deleted", mergeStores(deleter,holder).rooms.length===0);
+  ok("merge: deletion is order-independent", mergeStores(holder,deleter).rooms.length===0);
+}
+// 4. ...unless the other device edited it *after* the delete — then the edit is the later intent.
+{
+  const deleter=dev({graveyard:{rooms:{garage:T1},tasks:{}}, rooms:[]});
+  const editor =dev({rooms:[room("garage",{rating:8, updatedAt:T2})]});
+  const m=mergeStores(deleter,editor);
+  ok("merge: an edit after the delete revives the room", m.rooms.length===1 && m.rooms[0].rating===8);
+}
+// 5. Task tombstones behave the same way.
+{
+  const a=dev({rooms:[room("k",{tasks:[]})], graveyard:{rooms:{},tasks:{t9:T2}}});
+  const b=dev({rooms:[room("k",{tasks:[task("t9",{updatedAt:T1})]})]});
+  ok("merge: deleted task stays deleted", mergeStores(a,b).rooms[0].tasks.length===0);
+}
+// 6. Rooms added independently on each device are unioned.
+{
+  const a=dev({rooms:[room("a1")]}), b=dev({rooms:[room("b1")]});
+  const ids=mergeStores(a,b).rooms.map(r=>r.id).sort();
+  ok("merge: rooms added on both devices are kept", ids.join()==="a1,b1", ids.join());
+}
+// 7. History is append-only and must not duplicate.
+{
+  const h=x=>({id:x, roomId:"r", roomName:"R", startDate:"2026-01-01", endDate:"2026-01-0"+x,
+               startRating:2, endRating:4, tasksDone:1, tasksTotal:2});
+  const a=dev({history:[h(1),h(2)]}), b=dev({history:[h(2),h(3)]});
+  const m=mergeStores(a,b);
+  ok("merge: history unions without duplicates", m.history.length===3, m.history.length);
+  ok("merge: history sorted newest first", m.history[0].id===3, m.history[0].id);
+}
+// 8. Week and settings resolve by their own stamps.
+{
+  const wk={id:"w",roomId:"kitchen",startDate:"2026-02-01",endDate:"2026-02-08",startRating:3};
+  const a=dev({rooms:[room("kitchen")], week:null, weekUpdatedAt:T2});
+  const b=dev({rooms:[room("kitchen")], week:wk,  weekUpdatedAt:T1});
+  ok("merge: newer 'week closed' beats older open week", mergeStores(a,b).week===null);
+  const c=dev({rooms:[room("kitchen")], week:wk, weekUpdatedAt:T2});
+  const d=dev({rooms:[room("kitchen")], week:null, weekUpdatedAt:T1});
+  ok("merge: newer open week beats older closed", mergeStores(c,d).week!==null);
+  const e=dev({settings:{bias:3,weekLength:14,avoidRepeat:false}, settingsUpdatedAt:T2});
+  const f=dev({settings:{bias:0,weekLength:7,avoidRepeat:true}, settingsUpdatedAt:T1});
+  ok("merge: newer settings win", mergeStores(e,f).settings.bias===3);
+}
+// 9. A week whose room the other device deleted must not strand the Job tab.
+{
+  const a=dev({rooms:[], graveyard:{rooms:{gone:T2},tasks:{}}, weekUpdatedAt:T1,
+               week:{id:"w",roomId:"gone",startDate:"2026-02-01",endDate:"2026-02-08",startRating:3}});
+  const b=dev({rooms:[room("gone",{updatedAt:T1})], weekUpdatedAt:T1});
+  ok("merge: week pointing at a deleted room is cleared", mergeStores(a,b).week===null);
+}
+// 10. ratingLog is one entry per date, later device wins a shared date.
+{
+  const a=dev({rooms:[room("k",{updatedAt:T2, ratingLog:[{date:"2026-01-01",rating:5},{date:"2026-02-01",rating:8}]})]});
+  const b=dev({rooms:[room("k",{updatedAt:T1, ratingLog:[{date:"2026-02-01",rating:2},{date:"2026-03-01",rating:6}]})]});
+  const log=mergeStores(a,b).rooms[0].ratingLog;
+  ok("merge: ratingLog unions by date", log.length===3, log.length);
+  ok("merge: later device wins a shared date", log.find(e=>e.date==="2026-02-01").rating===8);
+  ok("merge: ratingLog stays sorted", log.map(e=>e.date).join()==="2026-01-01,2026-02-01,2026-03-01");
+}
+// 11. Ancient tombstones are pruned so the shared file can't grow forever.
+{
+  const old=Date.now()-200*24*3600*1000;
+  const a=dev({graveyard:{rooms:{ancient:old, recent:Date.now()},tasks:{}}});
+  const g=mergeStores(a,dev()).graveyard.rooms;
+  ok("merge: old tombstones are pruned", !("ancient" in g) && ("recent" in g));
+}
+// 12b. Clock skew: an edit made after seeing the other device's future-dated change must win.
+{
+  const future=Date.now()+10*60*1000;      // her phone runs ten minutes fast
+  localStorage.clear(); load();
+  const r0=store.rooms[0];
+  const hers=dev({clock:future, rooms:[{...r0, rating:9, updatedAt:future, tasks:[]}]});
+  applyMergedForTest(mergeStores(stripRuntime(store), hers));
+  ok("clock: merge adopts the higher clock", store.clock>=future, store.clock);
+  setRating(roomById(r0.id), 2);           // my genuinely-later edit, on a correct clock
+  ok("clock: my later edit outranks her fast clock", roomById(r0.id).updatedAt>future);
+  const back=mergeStores(stripRuntime(store), hers);
+  ok("clock: and survives the next merge", back.rooms.find(x=>x.id===r0.id).rating===2,
+     back.rooms.find(x=>x.id===r0.id).rating);
+}
+
+// 12. Merging is idempotent — re-syncing unchanged data must not churn the file.
+{
+  const a=dev({rooms:[room("k",{tasks:[task("t1")]})], history:[]});
+  const b=dev({rooms:[room("k",{tasks:[task("t1")]})]});
+  const once=mergeStores(a,b), twice=mergeStores(once,b);
+  ok("merge: idempotent", JSON.stringify(once)===JSON.stringify(twice));
+}
+// 13. base64 must survive the free text people actually type.
+{
+  const weird='Kid’s room — café 🏠 "quotes" & <tags>';
+  ok("sync: base64 round-trips unicode", b64decode(b64encode(weird))===weird);
+  ok("sync: base64 tolerates GitHub's wrapped output",
+     b64decode(b64encode(weird).replace(/(.{4})/g,"$1\n"))===weird);
+}
+
+// ---- the full cycle, against a stubbed GitHub ----
+{
+  const realFetch=window.fetch;
+  let remoteFile=null, remoteSha=null, puts=0, failNextPut=false;
+  window.fetch=async(url,opts)=>{
+    const u=String(url);
+    if(!/api\.github\.com/.test(u)) return realFetch(url,opts);
+    if(!opts || !opts.method || opts.method==="GET"){
+      if(remoteFile===null) return {ok:false, status:404, json:async()=>({message:"Not Found"})};
+      return {ok:true, status:200, json:async()=>({content:b64encode(JSON.stringify(remoteFile)), sha:remoteSha})};
+    }
+    if(opts.method==="PUT"){
+      puts++;
+      const body=JSON.parse(opts.body);
+      if(failNextPut){ failNextPut=false; return {ok:false, status:409, json:async()=>({message:"conflict"})}; }
+      if(remoteSha && body.sha!==remoteSha) return {ok:false, status:409, json:async()=>({message:"stale sha"})};
+      remoteFile=JSON.parse(b64decode(body.content));
+      remoteSha="sha"+puts;
+      return {ok:true, status:200, json:async()=>({content:{sha:remoteSha}})};
+    }
+    return {ok:false, status:500, json:async()=>({message:"unexpected"})};
+  };
+  const cfg={owner:"someone", repo:"roomspin-sync", path:"roomspin.json", token:"tok"};
+  await (async()=>{
+    localStorage.clear(); load();
+    const k=store.rooms.find(r=>r.name==="Kitchen");
+    setRating(k,3);
+    await connectSync(cfg);
+    ok("sync: connect creates the remote file", remoteFile!==null);
+    ok("sync: connect stores the config", isSynced()===true);
+    ok("sync: remote carries our rooms", remoteFile.rooms.length===store.rooms.length);
+    ok("sync: token is NOT in the synced payload", !JSON.stringify(remoteFile).includes("tok"));
+    ok("sync: token is NOT in the app's own store", !JSON.stringify(store).includes("tok"));
+
+    // Her phone edits the shared file directly while this device is idle.
+    const kid=k.id;
+    remoteFile.rooms=remoteFile.rooms.map(r=> r.id===kid
+      ? {...r, notes:"she added this", updatedAt:Date.now()+5000,
+         tasks:[{id:"hers", text:"call the plumber", done:false, doneAt:null,
+                 createdAt:todayStr(), updatedAt:Date.now()+5000}]}
+      : r);
+    // Meanwhile this device ticks something of its own.
+    addTask(roomById(kid),"my own task");
+    const mineId=roomById(kid).tasks.find(t=>t.text==="my own task").id;
+
+    await syncNow({quiet:true});
+    const merged=roomById(kid);
+    ok("sync: her edit arrives on this device", merged.notes==="she added this");
+    ok("sync: her task arrives", !!merged.tasks.find(t=>t.id==="hers"));
+    ok("sync: my concurrent task is not lost", !!merged.tasks.find(t=>t.id===mineId));
+    ok("sync: remote ends up with both tasks",
+       remoteFile.rooms.find(r=>r.id===kid).tasks.length===2,
+       remoteFile.rooms.find(r=>r.id===kid).tasks.length);
+
+    // A stale-sha collision should be retried, not surfaced as an error.
+    failNextPut=true;
+    setRating(roomById(kid),7);
+    await syncNow({quiet:true});
+    ok("sync: a 409 is retried and still lands", sync.status==="ok", sync.status+" / "+sync.detail);
+    ok("sync: retried write reached the remote", remoteFile.rooms.find(r=>r.id===kid).rating===7,
+       "remote="+remoteFile.rooms.find(r=>r.id===kid).rating+" local="+roomById(kid).rating+" puts="+puts);
+
+    // Disconnecting must leave the local copy intact and stop touching the network.
+    const before=puts;
+    disconnectSync();
+    ok("sync: disconnect clears the config", isSynced()===false);
+    setRating(roomById(kid),4);
+    await new Promise(r=>setTimeout(r,50));
+    ok("sync: no writes after disconnect", puts===before, puts+" vs "+before);
+    ok("sync: local data survives disconnect", roomById(kid).rating===4);
+  })();
+  window.fetch=realFetch;
+  localStorage.removeItem(SYNC_KEY);
+}
 
 // --- DEFAULTS must never be handed out by reference (regression: reset produced 30 rooms) ---
 localStorage.clear(); load();
@@ -387,6 +627,8 @@ if(ui.spin.phase==="landed"){
 }
 resetSpin();
 
+}
+await main();
 document.getElementById("out").textContent = log.join("\n")+"\n\n"+(fails?("FAILURES: "+fails):"ALL "+log.length+" CHECKS PASSED");
 document.title = fails? ("FAIL:"+fails) : "OK";
 </script></body></html>

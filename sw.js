@@ -1,5 +1,5 @@
 /* Roomspin service worker — bump CACHE when you change any file to force an update */
-const CACHE = "roomspin-v1";
+const CACHE = "roomspin-v2";
 const ASSETS = [
   "./",
   "./index.html",
@@ -23,6 +23,7 @@ const ASSETS = [
   "./js/render-settings.js",
   "./js/io.js",
   "./js/wire.js",
+  "./js/sync.js",
 ];
 
 self.addEventListener("install", (e) => {
@@ -40,6 +41,12 @@ self.addEventListener("activate", (e) => {
 self.addEventListener("fetch", (e) => {
   const req = e.request;
   if (req.method !== "GET") return;
+
+  // Only ever touch our own origin. Without this, a GET to api.github.com (the sync backend)
+  // falls through to the cache-first branch below and gets stored in the app's cache —
+  // which would serve a stale copy of the shared house and keep an authenticated response
+  // sitting in CacheStorage. Cross-origin requests go straight to the network, untouched.
+  if (new URL(req.url).origin !== self.location.origin) return;
 
   // Network-first for the page and the scripts, so a deploy lands as soon as you're online
   // instead of waiting for a cache bump to be noticed. Falls back to cache when offline.

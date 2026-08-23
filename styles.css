@@ -490,6 +490,33 @@ textarea.notes::placeholder{color:var(--on-surface-variant); opacity:.72;}
 .toggle.on .knob::after{width:24px; height:24px; margin-top:-12px;
   transform:translateX(16px); background:var(--on-primary);}
 
+/* ---------- shared house (sync) ---------- */
+.synform{display:flex; flex-direction:column; gap:10px; margin-bottom:14px;}
+.synform .field{flex:none;}
+.synform .field input{height:52px;}
+.synccard{padding:16px 18px;}
+.syncrow{display:flex; align-items:center; gap:12px;}
+.syncmain{flex:1; min-width:0;}
+.syncmain strong{display:block; font-size:15px; font-weight:500;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.syncmain em{display:block; font-style:normal; font-size:12px; color:var(--on-surface-variant);
+  margin-top:3px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.syncdot{width:10px; height:10px; border-radius:var(--r-full); flex-shrink:0;
+  background:var(--outline); transition:background var(--d-std) var(--ease);}
+.synccard.ok .syncdot{background:var(--success);}
+.synccard.error .syncdot{background:var(--error);}
+.synccard.syncing .syncdot, .synccard.pending .syncdot{background:var(--primary); animation:pulse 1.2s var(--ease) infinite;}
+.synccard.offline .syncdot{background:var(--outline);}
+@keyframes pulse{0%,100%{opacity:1;} 50%{opacity:.28;}}
+.note.bad{color:var(--error);}
+
+/* Header indicator — present only on a device that has been connected. */
+.syncstat{width:8px; height:8px; border-radius:var(--r-full); flex-shrink:0;
+  background:var(--outline);}
+.syncstat.ok{background:var(--success);}
+.syncstat.error{background:var(--error);}
+.syncstat.syncing, .syncstat.pending{background:var(--primary); animation:pulse 1.2s var(--ease) infinite;}
+
 /* ---------- empty state ---------- */
 .empty{padding:64px 24px 40px; text-align:center; color:var(--on-surface-variant);}
 .empty .icon{width:72px; height:72px; margin:0 auto 20px; border-radius:var(--r-full);

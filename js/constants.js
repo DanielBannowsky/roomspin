@@ -40,4 +40,12 @@ const DEFAULTS = {
   week: null,          // active week: {id, roomId, startDate, endDate, startRating, spunAt}
   history: [],         // finished weeks: {id, roomId, roomName, startDate, endDate, startRating, endRating, tasksDone, tasksTotal}
   seeded: false,
+  /* Merge bookkeeping for the shared-house sync (js/sync.js). Rooms and tasks carry their own
+     updatedAt; these cover the parts of the document that aren't in those lists. Tombstones
+     record deletions so a delete on one phone isn't undone by the other phone still holding
+     a copy. All of it is inert when sync is switched off. */
+  settingsUpdatedAt: 0,
+  weekUpdatedAt: 0,
+  clock: 0,            // hybrid logical clock — see stamp() in logic.js
+  graveyard: { rooms:{}, tasks:{} },
 };

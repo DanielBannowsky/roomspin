@@ -2,6 +2,28 @@
 /* ============================ logic ============================ */
 
 const roomById = id => store.rooms.find(r=>r.id===id) || null;
+
+/* Edit stamps for the shared-house merge. Every mutation records *when*, so two devices can
+   later be reconciled field by field instead of one clobbering the other wholesale. Cheap
+   enough to do unconditionally, and it keeps the merge honest even for edits made offline or
+   before sync was ever switched on. */
+/* Hybrid logical clock rather than a bare Date.now(). Two phones never agree on the time —
+   a few minutes of skew is normal — and with raw wall-clock stamps the phone whose clock runs
+   fast wins every conflict until the other catches up, silently reverting genuinely later
+   edits. Here each stamp is forced to exceed every stamp this device has *seen*, including
+   ones that arrived from the other device, so "happened after I saw your change" always beats
+   "my clock says earlier". Falls back to wall-clock time whenever that is already ahead, so
+   stamps stay human-readable and roughly correct. */
+function stamp(){
+  const t=Math.max(Date.now(), (store.clock||0)+1);
+  store.clock=t;
+  return t;
+}
+function touchRoom(r){ if(r) r.updatedAt=stamp(); }
+function touchWeek(){ store.weekUpdatedAt=stamp(); }
+function touchSettings(){ store.settingsUpdatedAt=stamp(); }
+function buryRoom(id){ store.graveyard.rooms[id]=stamp(); }
+function buryTask(id){ store.graveyard.tasks[id]=stamp(); }
 const activeRooms = () => store.rooms.filter(r=>!r.snoozed);
 
 /* ---- weighting ----
@@ -60,6 +82,7 @@ function startWeek(room){
     endDate:addDays(start,(store.settings.weekLength||7)),
     startRating:room.rating, spunAt:new Date().toISOString(),
   };
+  touchWeek();
   save();
 }
 /* Closes out the active week into history and records the new rating on the room. Task state
@@ -79,6 +102,7 @@ function endWeek(newRating){
   });
   if(room) setRating(room, newRating);
   store.week=null;
+  touchWeek();
   save();
 }
 const weekDaysLeft = () => store.week ? dayDiff(store.week.endDate, todayStr()) : 0;
@@ -88,12 +112,13 @@ const weekIsOver = () => store.week ? weekDaysLeft() <= 0 : false;
 function addRoom(name){
   const n=name.trim(); if(!n) return null;
   const room={id:uid(), name:n, rating:5, tasks:[], notes:"",
-    snoozed:false, createdAt:todayStr(), ratingLog:[{date:todayStr(), rating:5}]};
+    snoozed:false, createdAt:todayStr(), ratingLog:[{date:todayStr(), rating:5}], updatedAt:stamp()};
   store.rooms.push(room); save(); return room;
 }
 function deleteRoom(id){
   store.rooms=store.rooms.filter(r=>r.id!==id);
-  if(store.week?.roomId===id) store.week=null;   // the week's subject is gone; don't strand it
+  buryRoom(id);
+  if(store.week?.roomId===id){ store.week=null; touchWeek(); }   // don't strand the week
   save();
 }
 /* Records a rating change on the room's own log as well as the room, but only one entry per
@@ -107,22 +132,26 @@ function setRating(room,val){
   const last=room.ratingLog[room.ratingLog.length-1];
   if(last && last.date===today) last.rating=r;
   else room.ratingLog.push({date:today, rating:r});
+  touchRoom(room);
   save();
 }
 function addTask(room,text){
   const t=text.trim(); if(!t) return;
   room.tasks=room.tasks||[];
-  room.tasks.push({id:uid(), text:t, done:false, doneAt:null, createdAt:todayStr()});
+  room.tasks.push({id:uid(), text:t, done:false, doneAt:null, createdAt:todayStr(), updatedAt:stamp()});
   save();
 }
 function toggleTask(room,taskId){
   const t=(room.tasks||[]).find(x=>x.id===taskId); if(!t) return;
   t.done=!t.done;
   t.doneAt=t.done?todayStr():null;
+  t.updatedAt=stamp();
   save();
 }
 function deleteTask(room,taskId){
-  room.tasks=(room.tasks||[]).filter(t=>t.id!==taskId); save();
+  room.tasks=(room.tasks||[]).filter(t=>t.id!==taskId);
+  buryTask(taskId);
+  save();
 }
 const openTasks = room => (room.tasks||[]).filter(t=>!t.done).length;
 const doneTasks = room => (room.tasks||[]).filter(t=>t.done).length;

@@ -18,6 +18,7 @@ const ui = {
   copied:false, backed:false,
   pendingImport:null, importError:null,
   resetConfirm:false,
+  syncDraft:null,
   flash:null,
 };
 
@@ -49,24 +50,44 @@ function load(){
     store=freshDefaults();
     loadError=true;
   }
-  // Arrays don't survive deepMerge from a partial object cleanly if the stored value is the
-  // wrong type (hand-edited JSON, a truncated import), so normalise the collections here.
+  normalizeStore();
+  if(!store.seeded && !store.rooms.length) seedRooms();
+}
+/* Coerces whatever came out of storage (or off the sync backend, or a hand-edited backup)
+   into the shape the rest of the app assumes. Shared by load() and by the sync merge, so a
+   malformed remote file can't put the app into a state local loading would have rejected. */
+function normalizeStore(){
   if(!Array.isArray(store.rooms)) store.rooms=[];
   if(!Array.isArray(store.history)) store.history=[];
+  if(!store.graveyard || typeof store.graveyard!=="object") store.graveyard={rooms:{},tasks:{}};
+  if(!store.graveyard.rooms) store.graveyard.rooms={};
+  if(!store.graveyard.tasks) store.graveyard.tasks={};
   store.rooms.forEach(r=>{
     if(!Array.isArray(r.tasks)) r.tasks=[];
     if(!Array.isArray(r.ratingLog)) r.ratingLog=[{date:r.createdAt||todayStr(), rating:r.rating??5}];
     r.rating=snapRating(r.rating);
+    // Rooms and tasks written before sync existed have no stamp; treat them as oldest-known
+    // rather than newest, so a genuine edit on the other device always wins over dormant data.
+    if(typeof r.updatedAt!=="number") r.updatedAt=0;
+    r.tasks.forEach(t=>{ if(typeof t.updatedAt!=="number") t.updatedAt=0; });
   });
   if(store.week && !roomById(store.week.roomId)) store.week=null;   // room deleted out from under it
-  if(!store.seeded && !store.rooms.length) seedRooms();
+  // The clock must never sit below a stamp we already hold, or the next edit would be issued
+  // "before" data we are already showing.
+  let hi=Number(store.clock)||0;
+  store.rooms.forEach(r=>{
+    hi=Math.max(hi, r.updatedAt||0);
+    (r.tasks||[]).forEach(t=>{ hi=Math.max(hi, t.updatedAt||0); });
+  });
+  store.clock=Math.max(hi, store.settingsUpdatedAt||0, store.weekUpdatedAt||0);
 }
+
 /* First-run seed. Marked with a `seeded` flag rather than keyed off an empty room list, so a
    user who deliberately deletes every room doesn't get the starter set pushed back at them. */
 function seedRooms(){
   STARTER_ROOMS.forEach(n=>{
     store.rooms.push({id:uid(), name:n, rating:5, tasks:[], notes:"",
-      snoozed:false, createdAt:todayStr(), ratingLog:[{date:todayStr(), rating:5}]});
+      snoozed:false, createdAt:todayStr(), ratingLog:[{date:todayStr(), rating:5}], updatedAt:0});
   });
   store.seeded=true;
   save();
@@ -74,6 +95,9 @@ function seedRooms(){
 function save(){
   try{ localStorage.setItem(KEY, JSON.stringify(store)); saveError=false; }
   catch{ saveError=true; }
+  // Single hook for the shared house: every mutation in the app already ends in save(), so
+  // nothing has to remember to trigger a push. No-ops entirely when sync is switched off.
+  if(typeof scheduleSync==="function") scheduleSync();
 }
 /* Short-lived confirmation banner ("Saved", "Copied") — one at a time, cleared on a timer. */
 let flashHandle=null;

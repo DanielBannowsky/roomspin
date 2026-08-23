@@ -23,6 +23,9 @@ function renderSettings(){
       <span class="knob"></span>
     </button>
 
+    ${sectionLabel("Shared house")}
+    ${renderSync()}
+
     ${sectionLabel("Your data")}
     <p class="note left">Everything lives in this browser's storage on this device — nothing is uploaded anywhere. Clearing site data or switching browsers loses it, so download a backup now and then.</p>
     <button class="btn tonal" id="backupBtn">${I.down}Download backup (.json)</button>
@@ -38,9 +41,50 @@ function renderSettings(){
     ${ui.importError?`<div class="warn">${esc(ui.importError)}</div>`:""}
 
     ${sectionLabel("Danger zone")}
-    <button class="btn outlined danger ${ui.resetConfirm?"armed":""}" id="resetAll">${I.trash}${ui.resetConfirm?"Tap again — this wipes everything":"Reset all data"}</button>
+    <button class="btn outlined danger ${ui.resetConfirm?"armed":""}" id="resetAll">${I.trash}${
+      ui.resetConfirm ? (isSynced()?"Tap again — wipes it for both of you":"Tap again — this wipes everything")
+                      : "Reset all data"}</button>
+    ${isSynced()?`<p class="note left bad">This device is connected to a shared house, so resetting wipes it for <strong>both</strong> of you on the next sync. To reset only this phone, disconnect first.</p>`:""}
 
     <p class="note">Roomspin ${APP_VERSION} · works offline · <span class="mono">${KEY}</span></p>`;
+}
+
+/* Sync panel. Two states: connected (status + controls) or the setup form. The form asks for
+   the four things the GitHub contents API needs and nothing else, and the copy is explicit
+   about the token's scope — an over-scoped token is the one genuinely damaging mistake
+   available here, and it's made at exactly this moment. */
+function renderSync(){
+  const c=syncConfig();
+  if(c){
+    const when=c.lastSync?new Date(c.lastSync).toLocaleString([], {month:"short",day:"numeric",hour:"numeric",minute:"2-digit"}):"not yet";
+    return `
+      <div class="card synccard ${sync.status}">
+        <div class="syncrow">
+          <span class="syncdot"></span>
+          <div class="syncmain">
+            <strong>${esc(c.owner)}/${esc(c.repo)}</strong>
+            <em>${esc(c.path)} · last synced ${esc(when)}</em>
+          </div>
+        </div>
+        ${sync.detail?`<p class="note left ${sync.status==="error"?"bad":""}">${esc(sync.detail)}</p>`:""}
+        ${c.lastError&&sync.status!=="error"?`<p class="note left bad">Last error: ${esc(c.lastError)}</p>`:""}
+      </div>
+      <button class="btn tonal" id="syncNow" ${sync.busy?"disabled":""}>${I.sync}${sync.busy?"Syncing…":"Sync now"}</button>
+      <button class="btn outlined" id="syncOff">Disconnect this device</button>
+      <p class="note left">Disconnecting leaves the shared house untouched and keeps a copy of it on this device.</p>`;
+  }
+  const d=ui.syncDraft||{};
+  return `
+    <p class="note left">Point this device at a JSON file in a <strong>private</strong> GitHub repo and both of you will see the same house. Every change is a normal commit, so you also get full history and can undo anything from github.com.</p>
+    <div class="synform">
+      <label class="field"><input id="syncOwner" placeholder="GitHub username" value="${esc(d.owner||"")}" autocomplete="off" autocapitalize="none" spellcheck="false" aria-label="GitHub username"></label>
+      <label class="field"><input id="syncRepo" placeholder="private repo name" value="${esc(d.repo||"")}" autocomplete="off" autocapitalize="none" spellcheck="false" aria-label="Repository name"></label>
+      <label class="field"><input id="syncPath" placeholder="roomspin.json" value="${esc(d.path||"roomspin.json")}" autocomplete="off" autocapitalize="none" spellcheck="false" aria-label="File path"></label>
+      <label class="field"><input id="syncToken" type="password" placeholder="fine-grained access token" value="${esc(d.token||"")}" autocomplete="off" spellcheck="false" aria-label="Access token"></label>
+    </div>
+    <button class="btn filled" id="syncConnect" ${sync.busy?"disabled":""}>${I.sync}${sync.busy?"Connecting…":"Connect"}</button>
+    ${sync.status==="error"?`<p class="note left bad">${esc(sync.detail)}</p>`:""}
+    <p class="note left"><strong>Make the token fine-grained</strong>, scoped to that one private repo, with <em>Contents: Read and write</em> and an expiry date. It is stored only in this browser, is never included in a backup file, and never reaches the public repo. Anyone with the phone unlocked can read it, so don't use a classic token with access to everything you own.</p>`;
 }
 
 /* Concrete illustration of what the current bias does to *this* house — "higher = more
