@@ -1,0 +1,392 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><title>Roomspin tests</title>
+<link rel="stylesheet" href="../styles.css"></head><body>
+<div class="ladder" id="ladder"></div><span id="verTag"></span><span id="scoreTag"></span>
+<main id="main"></main><nav id="nav"></nav>
+<input type="file" id="importer" style="display:none">
+<h1 style="font:600 18px system-ui;margin:16px">Roomspin test harness</h1>
+<pre id="out" style="font:12px ui-monospace,monospace;padding:0 16px 40px;line-height:1.6"></pre>
+<script src="../js/constants.js"></script>
+<script src="../js/utils.js"></script>
+<script src="../js/icons.js"></script>
+<script src="../js/logic.js"></script>
+<script src="../js/state.js"></script>
+<script src="../js/app.js"></script>
+<script src="../js/wheel.js"></script>
+<script src="../js/spin.js"></script>
+<script src="../js/render-rooms.js"></script>
+<script src="../js/render-spin.js"></script>
+<script src="../js/render-week.js"></script>
+<script src="../js/render-progress.js"></script>
+<script src="../js/render-settings.js"></script>
+<script src="../js/io.js"></script>
+<script src="../js/wire.js"></script>
+<script>
+const log=[]; let fails=0;
+function ok(name,cond,extra){ if(cond) log.push("PASS  "+name); else { fails++; log.push("FAIL  "+name+(extra?"  :: "+extra:"")); } }
+function tryIt(name,fn){ try{ fn(); log.push("PASS  "+name); }catch(e){ fails++; log.push("FAIL  "+name+" :: "+e.message+"\n"+e.stack); } }
+
+localStorage.clear();
+
+// --- boot / seed ---
+load();
+ok("seeds starter rooms", store.rooms.length===STARTER_ROOMS.length, store.rooms.length);
+ok("seed rating is 5", store.rooms.every(r=>r.rating===5));
+ok("house score 5.0", houseScore()===5);
+ok("seeded flag set", store.seeded===true);
+
+// deliberately empty the house and reload: seed must NOT come back
+store.rooms=[]; save(); load();
+ok("no re-seed after user empties list", store.rooms.length===0);
+
+localStorage.clear(); load();
+
+// --- rooms / ratings ---
+const kitchen=store.rooms.find(r=>r.name==="Kitchen");
+const garage=store.rooms.find(r=>r.name==="Garage");
+setRating(kitchen,2); setRating(garage,9);
+ok("setRating stores value", kitchen.rating===2);
+setRating(kitchen,99); ok("rating clamps high", kitchen.rating===10);
+setRating(kitchen,-4); ok("rating clamps low", kitchen.rating===0);
+setRating(kitchen,6.5); ok("half points stored", kitchen.rating===6.5);
+setRating(kitchen,6.3); ok("snaps to nearest half (down)", kitchen.rating===6.5);
+setRating(kitchen,6.1); ok("snaps to nearest half (to 6)", kitchen.rating===6);
+setRating(kitchen,"7.5"); ok("string input snaps", kitchen.rating===7.5);
+setRating(kitchen,NaN); ok("NaN falls back to 5 rather than poisoning averages", kitchen.rating===5);
+ok("fmtRating drops .0 on whole numbers", fmtRating(7)==="7" && fmtRating(7.5)==="7.5");
+ok("snapRating handles undefined", snapRating(undefined)===5);
+setRating(kitchen,2);
+ok("one ratingLog entry per day", kitchen.ratingLog.filter(e=>e.date===todayStr()).length===1, JSON.stringify(kitchen.ratingLog));
+
+// --- weighting ---
+store.settings.bias=2;
+ok("worse room outweighs better", roomWeight(kitchen)>roomWeight(garage));
+ok("weight formula (11-r)^bias", roomWeight(kitchen)===Math.pow(9,2) && roomWeight(garage)===Math.pow(2,2));
+setRating(garage,8.5);
+ok("half-point rating weights between its neighbours", roomWeight(garage)===Math.pow(2.5,2), roomWeight(garage));
+setRating(garage,9);
+store.settings.bias=0;
+ok("bias 0 = uniform weight", roomWeight(kitchen)===roomWeight(garage) && roomWeight(kitchen)===1);
+store.settings.bias=2;
+const ten=store.rooms[3]; setRating(ten,10);
+ok("10/10 room still has non-zero weight", roomWeight(ten)>0, roomWeight(ten));
+
+// odds sum to 1 and are sorted descending
+const odds=spinOdds();
+const sum=odds.reduce((a,o)=>a+o.p,0);
+ok("odds sum to 1", Math.abs(sum-1)<1e-9, sum);
+ok("odds sorted desc", odds.every((o,i)=>i===0||odds[i-1].p>=o.p));
+ok("worst room has top odds", odds[0].room.id===kitchen.id, odds[0].room.name);
+
+// --- empirical distribution check: 60k draws, worst room must dominate ---
+const counts={}; const N=60000;
+for(let i=0;i<N;i++){ const r=pickWeighted(); counts[r.id]=(counts[r.id]||0)+1; }
+const kExp=odds.find(o=>o.room.id===kitchen.id).p;
+const kObs=counts[kitchen.id]/N;
+ok("empirical freq matches weighted odds (kitchen)", Math.abs(kObs-kExp)<0.02, "exp "+kExp.toFixed(3)+" obs "+kObs.toFixed(3));
+const gExp=odds.find(o=>o.room.id===garage.id).p;
+const gObs=(counts[garage.id]||0)/N;
+ok("empirical freq matches weighted odds (garage)", Math.abs(gObs-gExp)<0.02, "exp "+gExp.toFixed(3)+" obs "+gObs.toFixed(3));
+ok("every pool room gets drawn sometimes", spinPool().every(r=>counts[r.id]>0));
+
+// --- wheel geometry ---
+const wodds=spinOdds(); const wedges=wheelWedges(wodds);
+ok("wedges cover exactly 360 degrees", Math.abs((wedges[wedges.length-1].a1 - wedges[0].a0) - 360)<1e-6,
+   (wedges[wedges.length-1].a1 - wedges[0].a0));
+ok("wedges start under the needle at -90", Math.abs(wedges[0].a0+90)<1e-9);
+ok("wedges are contiguous", wedges.every((w,i)=>i===0||Math.abs(w.a0-wedges[i-1].a1)<1e-9));
+ok("wedge sweep is proportional to probability", wedges.every(w=>Math.abs(w.sweep-w.p*360)<1e-9));
+ok("worst room owns the biggest wedge",
+   wedges.reduce((a,b)=>a.sweep>b.sweep?a:b).id===kitchen.id);
+tryIt("wheelSvg renders for a normal pool",()=>{ const svg=wheelSvg(wodds,0); if(!/<path/.test(svg)) throw new Error("no wedges"); });
+tryIt("wheelSvg renders for a one-room pool",()=>{
+  const one=[{room:store.rooms[0],weight:1,p:1}];
+  const svg=wheelSvg(one,0);
+  if(!/<path/.test(svg)) throw new Error("no ring drawn");
+  if(/NaN/.test(svg)) throw new Error("NaN in path data");
+});
+tryIt("wheelSvg never emits NaN coordinates",()=>{ if(/NaN/.test(wheelSvg(wodds,37.5))) throw new Error("NaN in path"); });
+ok("wheel labels escape room names", !wheelSvg([{room:{id:"z",name:'<b>x</b>',rating:1},p:1,weight:1}],0).includes("<b>x</b>"));
+
+// landing maths: the chosen wedge must end up under the needle at -90 (mod 360)
+(function(){
+  let worst=0;
+  wedges.forEach(w=>{
+    const cur=123.4;
+    const need=(((-90 - w.mid - cur) % 360) + 360) % 360;
+    const target=cur + 360*4 + need;                    // centre landing, no jitter
+    const final=((target + w.mid + 90) % 360 + 360) % 360;
+    worst=Math.max(worst, Math.min(final, 360-final));
+  });
+  ok("landing angle puts the winning wedge under the needle", worst<1e-6, worst);
+})();
+
+// --- snooze / pool ---
+garage.snoozed=true;
+ok("snoozed room leaves the pool", !spinPool().some(r=>r.id===garage.id));
+garage.snoozed=false;
+
+// --- avoid-repeat, incl. the two-room fallback ---
+store.settings.avoidRepeat=true;
+store.history=[{roomId:kitchen.id, roomName:"Kitchen"}];
+ok("avoidRepeat excludes last week's room", !spinPool().some(r=>r.id===kitchen.id));
+const savedRooms=store.rooms;
+store.rooms=[kitchen];                      // one-room house: excluding it would empty the pool
+ok("avoidRepeat falls back when pool would be empty", spinPool().length===1);
+ok("pickWeighted survives single-room pool", pickWeighted().id===kitchen.id);
+store.rooms=savedRooms; store.history=[];
+
+// all rooms at 10 -> total weight still positive, pick still works
+const backup=store.rooms.map(r=>r.rating);
+store.rooms.forEach(r=>{r.rating=10;});
+ok("pickWeighted works with a perfect house", !!pickWeighted());
+store.rooms.forEach((r,i)=>{r.rating=backup[i];});
+
+// --- tasks ---
+addTask(kitchen,"regrout backsplash"); addTask(kitchen,"fix drawer slide"); addTask(kitchen,"   ");
+ok("blank task rejected", kitchen.tasks.length===2, kitchen.tasks.length);
+ok("open task count", openTasks(kitchen)===2);
+toggleTask(kitchen,kitchen.tasks[0].id);
+ok("toggle marks done + stamps date", kitchen.tasks[0].done===true && kitchen.tasks[0].doneAt===todayStr());
+ok("done/open counts split", doneTasks(kitchen)===1 && openTasks(kitchen)===1);
+toggleTask(kitchen,kitchen.tasks[0].id);
+ok("untoggle clears doneAt", kitchen.tasks[0].doneAt===null);
+toggleTask(kitchen,kitchen.tasks[0].id);
+
+// --- week lifecycle ---
+store.settings.weekLength=7;
+startWeek(kitchen);
+ok("week records start rating", store.week.startRating===kitchen.rating);
+ok("week end date is +7", store.week.endDate===addDays(store.week.startDate,7));
+ok("days left = 7 on day one", weekDaysLeft()===7);
+ok("week not over on day one", weekIsOver()===false);
+store.week.endDate=todayStr();
+ok("weekIsOver when end date is today", weekIsOver()===true);
+endWeek(6);
+ok("history row written", store.history.length===1);
+ok("history captures delta", store.history[0].startRating===2 && store.history[0].endRating===6, JSON.stringify(store.history[0]));
+ok("history counts tasks ticked this week", store.history[0].tasksDone===1, store.history[0].tasksDone);
+ok("room rating updated on close-out", kitchen.rating===6);
+ok("week cleared after close-out", store.week===null);
+
+// deleting the week's room must not strand the week
+startWeek(garage); deleteRoom(garage.id);
+ok("deleting the active room clears the week", store.week===null);
+ok("room actually deleted", !roomById(garage.id));
+
+// --- house trend ---
+const dates=houseTrendDates();
+ok("trend dates present", dates.length>=1);
+ok("houseScoreOn(today) matches houseScore", Math.abs(houseScoreOn(todayStr())-houseScore())<1e-9);
+ok("houseScoreOn before any room existed is null", houseScoreOn("1999-01-01")===null);
+
+// --- persistence round trip ---
+save();
+const snapshot=JSON.stringify(store);
+store=null; load();
+ok("store survives save/load", store.rooms.length>0 && store.history.length===1);
+ok("round trip is lossless", JSON.stringify(store)===snapshot);
+
+// --- corrupt data handling ---
+localStorage.setItem(KEY,"{not json");
+loadError=false; load();
+ok("corrupt data flags loadError", loadError===true);
+ok("corrupt data is preserved for recovery", localStorage.getItem(KEY+"-corrupt-backup")==="{not json");
+ok("corrupt data does not crash render", typeof renderRooms()==="string");
+
+// --- hand-mangled shapes (wrong types where arrays are expected) ---
+localStorage.setItem(KEY, JSON.stringify({rooms:[{id:"x",name:"Odd",rating:"7",tasks:null,ratingLog:"nope"}], history:"nope", week:{roomId:"ghost"}}));
+loadError=false; load();
+ok("string rating coerced to number", store.rooms[0].rating===7);
+ok("null tasks normalised to array", Array.isArray(store.rooms[0].tasks));
+ok("bad ratingLog rebuilt", Array.isArray(store.rooms[0].ratingLog) && store.rooms[0].ratingLog.length===1);
+ok("bad history normalised", Array.isArray(store.history));
+ok("week pointing at a missing room is dropped", store.week===null);
+
+// --- import validation ---
+ok("rejects non-backup json", validBackup({foo:1})===false);
+ok("rejects null", validBackup(null)===false);
+ok("rejects rooms of wrong shape", validBackup({rooms:[{nope:1}]})===false);
+ok("accepts a real backup", validBackup(JSON.parse(snapshot))===true);
+ui.pendingImport={data:JSON.parse(snapshot)};
+applyImport();
+ok("import restores rooms", store.rooms.length>0);
+ok("import clears pending flag", ui.pendingImport===null);
+
+// --- render every tab, in every notable state, and assert no throw ---
+const tabs=["rooms","spin","week","progress","settings"];
+tabs.forEach(t=>tryIt("render "+t+" (week running)",()=>{ ui.tab=t; startWeek(store.rooms[0]); render(); if(!$main.innerHTML.trim()) throw new Error("empty output"); }));
+store.week=null;
+tabs.forEach(t=>tryIt("render "+t+" (no week)",()=>{ ui.tab=t; render(); if(!$main.innerHTML.trim()) throw new Error("empty output"); }));
+tryIt("render room detail",()=>{ ui.tab="rooms"; ui.openRoomId=store.rooms[0].id; render(); if(!$main.querySelector("#roomName")) throw new Error("no detail view"); });
+ui.openRoomId=null;
+tryIt("render odds table open",()=>{ ui.tab="spin"; ui.oddsOpen=true; render(); });
+tryIt("render close-out panel",()=>{ startWeek(store.rooms[0]); ui.tab="week"; ui.endWeekOpen=true; ui.endWeekRating=8; render(); if(!$main.querySelector("[data-endslider]")) throw new Error("no sign-off slider"); });
+ui.endWeekOpen=false; store.week=null;
+tryIt("render with zero rooms",()=>{ const s=store.rooms; store.rooms=[]; store.history=[]; tabs.forEach(t=>{ui.tab=t;render();}); store.rooms=s; });
+tryIt("render with one room",()=>{ const s=store.rooms; store.rooms=[s[0]]; tabs.forEach(t=>{ui.tab=t;render();}); store.rooms=s; });
+tryIt("render with every room snoozed",()=>{ store.rooms.forEach(r=>r.snoozed=true); ui.tab="spin"; render(); store.rooms.forEach(r=>r.snoozed=false); });
+
+// --- escaping: a room name with markup must not become markup ---
+localStorage.clear(); load();
+const evil=addRoom('<img src=x onerror=alert(1)>"&');
+addTask(evil,'<script>bad()<\/script>');
+ui.tab="rooms"; ui.openRoomId=evil.id; render();
+ok("room name escaped in detail", !$main.innerHTML.includes("<img src=x"));
+ok("task text escaped", !$main.innerHTML.includes("<script>bad()"));
+ui.openRoomId=null; ui.tab="rooms"; render();
+ok("room name escaped in list", !$main.innerHTML.includes("<img src=x"));
+
+// --- wire(): the handlers actually attach and mutate state ---
+ui.tab="rooms"; ui.openRoomId=null; render();
+tryIt("nav buttons wired",()=>{ if($nav.querySelectorAll("[data-tab]").length!==5) throw new Error("nav count"); });
+const r0=store.rooms[0];
+ui.openRoomId=r0.id; ui.tab="rooms"; render();
+const before=r0.rating;
+$main.querySelector("[data-rate='0.5']").click();
+ok("plus button raises by a half point", store.rooms[0].rating===Math.min(10,before+0.5), before+" -> "+store.rooms[0].rating);
+$main.querySelector("[data-rate='-0.5']").click();
+ok("minus button lowers by a half point", store.rooms[0].rating===before);
+const sl=$main.querySelector("[data-rateslider]");
+ok("rating slider is rendered", !!sl);
+ok("slider steps in half points", sl.step==="0.5" && sl.min==="0" && sl.max==="10");
+sl.value="3.5"; sl.dispatchEvent(new Event("input"));
+ok("slider drag updates the rating live", store.rooms[0].rating===3.5);
+sl.value="8.5"; sl.dispatchEvent(new Event("change"));
+ok("slider release commits the rating", store.rooms[0].rating===8.5);
+ok("committed rating is logged", store.rooms[0].ratingLog.some(e=>e.rating===8.5));
+const tcount=(store.rooms[0].tasks||[]).length;
+$main.querySelector("#newTask").value="painted trim";
+$main.querySelector("#addTaskBtn").click();
+ok("add-task button adds a task", store.rooms[0].tasks.length===tcount+1);
+const tid=store.rooms[0].tasks[store.rooms[0].tasks.length-1].id;
+$main.querySelector("[data-toggletask='"+tid+"']").click();
+ok("checkbox toggles the task", store.rooms[0].tasks.find(t=>t.id===tid).done===true);
+$main.querySelector("[data-deltask='"+tid+"']").click();
+ok("first delete tap only arms", store.rooms[0].tasks.some(t=>t.id===tid) && ui.confirmDelTask===tid);
+$main.querySelector("[data-deltask='"+tid+"']").click();
+ok("second delete tap removes", !store.rooms[0].tasks.some(t=>t.id===tid));
+$main.querySelector("#snoozeRoom").click();
+ok("snooze button toggles", store.rooms[0].snoozed===true);
+$main.querySelector("#snoozeRoom").click();
+$main.querySelector("#roomName").value="   ";
+$main.querySelector("#roomName").dispatchEvent(new Event("change"));
+ok("blank rename refused", store.rooms[0].name.trim().length>0, store.rooms[0].name);
+ui.openRoomId=null;
+
+// settings wiring
+ui.tab="settings"; render();
+$main.querySelector("[data-bias='3']").click();
+ok("bias chip updates setting", store.settings.bias===3);
+const wl=store.settings.weekLength;
+$main.querySelector("[data-weeklen='1']").click();
+ok("week length stepper", store.settings.weekLength===wl+1);
+$main.querySelector("#toggleRepeat").click();
+ok("repeat toggle flips", store.settings.avoidRepeat===false);
+// changing week length while a week runs must move its end date
+store.settings.avoidRepeat=true; startWeek(store.rooms[0]); ui.tab="settings"; render();
+const oldEnd=store.week.endDate;
+$main.querySelector("[data-weeklen='1']").click();
+ok("live week end date follows the setting", store.week.endDate!==oldEnd && store.week.endDate===addDays(store.week.startDate,store.settings.weekLength));
+store.week=null;
+
+// sign-off slider end to end
+startWeek(store.rooms[0]); store.rooms[0].rating=4; ui.tab="week"; ui.endWeekOpen=true; ui.endWeekRating=4; render();
+const esl=$main.querySelector("[data-endslider]");
+ok("sign-off slider rendered", !!esl);
+esl.value="7.5"; esl.dispatchEvent(new Event("input"));
+ok("sign-off slider updates the pending rating", ui.endWeekRating===7.5);
+$main.querySelector("[data-endnudge='-0.5']").click();
+ok("sign-off nudge steps a half point", ui.endWeekRating===7);
+const hLen=store.history.length;
+$main.querySelector("#confirmEnd").click();
+ok("sign-off writes a history row", store.history.length===hLen+1);
+ok("history keeps the half-point rating", store.history[0].endRating===7);
+ok("sign-off applies the rating to the room", roomById(store.history[0].roomId).rating===7);
+ok("sign-off sends you back to the spin", ui.tab==="spin" && store.week===null);
+
+// spin wiring: the landed result is the one that starts the week
+ui.tab="spin"; resetSpin(); render();
+ui.spin={phase:"landed", cursor:0, resultId:store.rooms[0].id, pool:store.rooms.map(r=>r.id)};
+render();
+$main.querySelector("#startWeek").click();
+ok("Start-the-week uses the landed room", store.week && store.week.roomId===store.rooms[0].id);
+ok("starting a week moves you to the Week tab", ui.tab==="week");
+store.week=null; resetSpin();
+
+// --- every interactive control must be styled and hit a 44px touch target ---
+// Catches the whole class of "markup migrated everywhere except here" bugs: a control that
+// lost its class renders at the browser default (~20px) instead of the design system's size,
+// which no amount of state-assertion would notice.
+localStorage.clear(); load();
+const g=roomById(store.rooms[0].id);
+addTask(g,"a task"); startWeek(g);
+["rooms","spin","week","progress","settings"].forEach(t=>{
+  ui.tab=t; ui.openRoomId = t==="rooms" ? g.id : null; render();
+  const small=[...$main.querySelectorAll("button, input:not([type=range]), textarea")]
+    .filter(el=>el.offsetParent!==null)
+    .map(el=>({el, h:el.getBoundingClientRect().height}))
+    .filter(x=>x.h < 44)
+    .map(x=>x.el.tagName.toLowerCase()+"#"+(x.el.id||"-")+"."+(x.el.className||"none")+" h="+x.h.toFixed(0));
+  ok("all controls meet the 44px touch target on the "+t+" tab", small.length===0, small.join(" | "));
+  const unstyled=[...$main.querySelectorAll("button, input, textarea")]
+    .filter(el=>!el.className && !el.closest(".field"))
+    .map(el=>el.tagName.toLowerCase()+"#"+(el.id||"-"));
+  ok("no unstyled controls on the "+t+" tab", unstyled.length===0, unstyled.join(" | "));
+});
+store.week=null; ui.openRoomId=null;
+
+// --- DEFAULTS must never be handed out by reference (regression: reset produced 30 rooms) ---
+localStorage.clear(); load();
+ok("store does not alias DEFAULTS.rooms", store.rooms!==DEFAULTS.rooms);
+ok("store does not alias DEFAULTS.history", store.history!==DEFAULTS.history);
+ok("seeding leaves DEFAULTS untouched", DEFAULTS.rooms.length===0, DEFAULTS.rooms.length);
+const seedN=store.rooms.length;
+resetAll(); ok("reset once gives the starter set", store.rooms.length===seedN, store.rooms.length);
+resetAll(); resetAll();
+ok("repeated resets do not duplicate rooms", store.rooms.length===seedN, store.rooms.length);
+store.history.push({id:"x"});
+ok("history writes do not leak into DEFAULTS", DEFAULTS.history.length===0);
+store.history=[];
+
+// --- the sign-off panel replaces the live rating panel rather than sitting alongside it ---
+localStorage.clear(); load();
+startWeek(store.rooms[0]); ui.tab="week"; ui.endWeekOpen=false; render();
+ok("live rating slider shows while the week runs", !!$main.querySelector("[data-rateslider]"));
+ui.endWeekOpen=true; ui.endWeekRating=5; render();
+ok("live rating slider is hidden during sign-off", !$main.querySelector("[data-rateslider]"));
+ok("only one rating panel on screen at a time", $main.querySelectorAll(".ratepanel").length===1);
+ui.endWeekOpen=false; store.week=null;
+
+// --- full cycle, driven the way a person would: spin, work, sign off ---
+localStorage.clear(); load();
+store.settings.avoidRepeat=false;
+const startScore=houseScore();
+ui.tab="spin"; render();
+startSpin();                                   // reduced-motion path resolves synchronously here
+ok("a spin produces a result", !!ui.spin && !!ui.spin.resultId);
+const picked=roomById(ui.spin.resultId);
+ok("the result is a real room in the pool", !!picked && spinPool().some(r=>r.id===picked.id));
+if(ui.spin.phase==="landed"){
+  render();
+  $main.querySelector("#startWeek").click();
+  ok("cycle: week opened on the spun room", store.week && store.week.roomId===picked.id);
+  addTask(picked,"paint the ceiling"); addTask(picked,"replace the outlet");
+  ui.tab="week"; render();
+  $main.querySelectorAll("[data-toggletask]").forEach(b=>b.click());
+  ok("cycle: both punch items ticked", openTasks(roomById(picked.id))===0);
+  ui.endWeekOpen=true; ui.endWeekRating=8.5; render();
+  $main.querySelector("#confirmEnd").click();
+  ok("cycle: week closed into history", store.history.length===1 && store.history[0].roomId===picked.id);
+  ok("cycle: both items counted in the history row", store.history[0].tasksDone===2, store.history[0].tasksDone);
+  ok("cycle: room carries the new rating", roomById(picked.id).rating===8.5);
+  ok("cycle: house score went up", houseScore()>startScore, startScore+" -> "+houseScore());
+  ok("cycle: the spin is free again", store.week===null);
+} else {
+  // The animated path is timer-driven; assert the intermediate state is at least coherent.
+  ok("cycle: spinning state carries a target angle", typeof ui.spin.target==="number");
+}
+resetSpin();
+
+document.getElementById("out").textContent = log.join("\n")+"\n\n"+(fails?("FAILURES: "+fails):"ALL "+log.length+" CHECKS PASSED");
+document.title = fails? ("FAIL:"+fails) : "OK";
+</script></body></html>

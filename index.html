@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<meta name="theme-color" content="#FFFBFE" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#141218" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Roomspin">
+<meta name="description" content="Rate every room in the house out of ten, spin weighted toward the worst, and fix it for a week.">
+<title>Roomspin</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon-192.png">
+<!-- Roboto is the canonical Material typeface. Loaded async and non-blocking: if the network
+     is gone (this is an offline-capable PWA) the local stack in styles.css takes over and the
+     app still paints — the font is a finish, not a dependency. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" media="print" onload="this.media='all'">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- Decorative organic blur shapes: the signature Material You atmosphere. Fixed behind the
+     content so they don't scroll with it, and hidden from assistive tech — they carry no
+     information at all. -->
+<div class="atmos" aria-hidden="true">
+  <span class="blob b1"></span>
+  <span class="blob b2"></span>
+  <span class="blob b3"></span>
+</div>
+
+<header class="appbar">
+  <span class="appicon" aria-hidden="true"></span>
+  <h1>Roomspin</h1>
+  <span class="scorepill" id="scoreTag">—</span>
+  <span class="rev" id="verTag"></span>
+</header>
+
+<main id="main"></main>
+<nav id="nav"></nav>
+
+<input type="file" id="importer" accept="application/json" style="display:none">
+
+<script src="js/constants.js"></script>
+<script src="js/utils.js"></script>
+<script src="js/icons.js"></script>
+<script src="js/logic.js"></script>
+<script src="js/state.js"></script>
+<script src="js/app.js"></script>
+<script src="js/wheel.js"></script>
+<script src="js/spin.js"></script>
+<script src="js/render-rooms.js"></script>
+<script src="js/render-spin.js"></script>
+<script src="js/render-week.js"></script>
+<script src="js/render-progress.js"></script>
+<script src="js/render-settings.js"></script>
+<script src="js/io.js"></script>
+<script src="js/wire.js"></script>
+<script>
+"use strict";
+/* ============================ boot ============================ */
+load(); render();
+if("serviceWorker" in navigator){
+  window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));
+}
+</script>
+</body>
+</html>
