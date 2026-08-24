@@ -56,14 +56,14 @@ const pillarBy = k => PILLARS.find(p=>p.key===k) || null;
    than being forced into a pillar it doesn't belong in. */
 const PILLAR_HINTS = [
   ["repair",    /\b(fix|repair|patch|seal|caulk|foam|broken|leak|crack|rot|sand|regrout|grout|replace)\b/i],
-  ["light",     /\b(light|lighting|lamp|sconce|bulb|dimmer|lantern|shade|shades|blind|blinds|skylight|window)\b/i],
+  ["light",     /\b(lights?|lighting|lamps?|sconces?|bulbs?|dimmers?|lanterns?|shades?|blinds?|skylights?|windows?)\b/i],
   ["color",     /\b(paint|colou?r|wallpaper|stain|whitewash)\b/i],
-  ["greenery",  /\b(plant|plants|pot|pots|planter|tree|flower|garden|herb|plants?|climbing|moss|shrub)\b/i],
-  ["storage",   /\b(storage|store|shelf|shelving|shelves|cabinet|bin|basket|hook|hooks|closet|organi[sz]e|toolbox|rack|drawer|pegboard)\b/i],
+  ["greenery",  /\b(plants?|pots?|planters?|trees?|flowers?|garden|herbs?|climbing|moss|shrubs?)\b/i],
+  ["storage",   /\b(storage|store|shelf|shelving|shelves|cabinets?|bins?|baskets?|hooks?|closets?|organi[sz]e|toolbox|racks?|drawers?|pegboard)\b/i],
   ["comfort",   /\b(fan|heater|heat|insulation|ac|a\/c|air|airflow|bug|repellent|mosquito|sound|speaker|scent|diffuser|cushion|breeze|shade cloth)\b/i],
-  ["texture",   /\b(rug|towel|towels|linen|throw|pillow|blanket|mat|mats|fabric|upholster|curtain|curtains|tile|wood|stone)\b/i],
+  ["texture",   /\b(rugs?|towels?|linen|throws?|pillows?|blankets?|mats?|fabric|upholster|curtains?|tile|wood|stone)\b/i],
   ["character", /\b(art|photo|frame|print|poster|candle|book|books|decor|mirror|vase|shelf styling)\b/i],
-  ["layout",    /\b(table|chair|chairs|sofa|couch|desk|bench|stool|bed|arrange|layout|furniture|seating)\b/i],
+  ["layout",    /\b(tables?|chairs?|sofas?|couch(es)?|desks?|bench(es)?|stools?|beds?|arrange|layout|furniture|seating|dining|eat|eating)\b/i],
 ];
 function suggestPillar(text){
   const t=String(text||"");
