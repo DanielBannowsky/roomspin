@@ -135,10 +135,20 @@ function setRating(room,val){
   touchRoom(room);
   save();
 }
-function addTask(room,text){
+function addTask(room,text,pillar){
   const t=text.trim(); if(!t) return;
   room.tasks=room.tasks||[];
-  room.tasks.push({id:uid(), text:t, done:false, doneAt:null, createdAt:todayStr(), updatedAt:stamp()});
+  // An explicit choice always wins; otherwise guess from the wording. Either way it's one tap
+  // to change, so a wrong guess costs nothing and a right one saves the tagging step entirely.
+  const p = pillar!==undefined && pillar!==null ? pillar : suggestPillar(t);
+  room.tasks.push({id:uid(), text:t, pillar:p, done:false, doneAt:null,
+    createdAt:todayStr(), updatedAt:stamp()});
+  save();
+}
+function setTaskPillar(room,taskId,pillar){
+  const t=(room.tasks||[]).find(x=>x.id===taskId); if(!t) return;
+  t.pillar = t.pillar===pillar ? null : pillar;   // tapping the current tag clears it
+  t.updatedAt=stamp();
   save();
 }
 function toggleTask(room,taskId){
@@ -153,6 +163,20 @@ function deleteTask(room,taskId){
   buryTask(taskId);
   save();
 }
+/* Which pillars this room has any item against, and which it has *finished*. The gap between
+   "nothing here" and "handled" is the whole point of the view: a room with eight storage items
+   and no light isn't eight-ninths of the way to a ten, it's a well-organised dim room. */
+function pillarCoverage(room){
+  const tasks=room.tasks||[];
+  return PILLARS.map(p=>{
+    const mine=tasks.filter(t=>t.pillar===p.key);
+    return {pillar:p, total:mine.length, done:mine.filter(t=>t.done).length};
+  });
+}
+const untaggedTasks = room => (room.tasks||[]).filter(t=>!t.pillar).length;
+/* Pillars with nothing at all against them — the prompt for "what would take this to a ten?" */
+const missingPillars = room => pillarCoverage(room).filter(c=>c.total===0).map(c=>c.pillar);
+
 const openTasks = room => (room.tasks||[]).filter(t=>!t.done).length;
 const doneTasks = room => (room.tasks||[]).filter(t=>t.done).length;
 

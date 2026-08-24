@@ -81,6 +81,47 @@ function ratingSlider(val,attr){
       <div class="sticks">${[0,2,4,6,8,10].map(n=>`<span class="mono">${n}</span>`).join("")}</div>
     </div>`;
 }
+/* ---- design pillars ---- */
+/* Coverage grid. Filled = has items, ticked = all of them done, hollow = nothing here yet.
+   Tapping a hollow one starts an item already tagged with it, which is the fastest path from
+   "this room feels unfinished" to actually writing down why. */
+function pillarGrid(room){
+  const cov=pillarCoverage(room);
+  const covered=cov.filter(c=>c.total>0).length;
+  return `
+    <div class="pgrid">
+      ${cov.map(c=>{
+        const state = c.total===0 ? "none" : (c.done===c.total ? "done" : "some");
+        return `<button class="ptile ${state}" data-pillartile="${c.pillar.key}"
+                  style="--p:var(--pil-${c.pillar.key})" title="${esc(c.pillar.hint)}">
+          <span class="pdot"></span>
+          <span class="plab">${c.pillar.label}</span>
+          <span class="pcount">${c.total? (c.done===c.total?"done":`${c.done}/${c.total}`) : "—"}</span>
+        </button>`;
+      }).join("")}
+    </div>
+    <p class="note left">${covered===PILLARS.length
+      ? "Every pillar has something against it — that's what makes a room read as finished."
+      : `${covered}/${PILLARS.length} pillars covered. Tap a hollow one to add something for it.`}</p>`;
+}
+/* The tag shown on a punch-list item. It's a button: tapping opens the picker for that item. */
+function pillarChip(t){
+  const p=pillarBy(t.pillar);
+  return `<button class="pchip ${p?"on":""}" data-pillarpick="${t.id}"
+            style="${p?`--p:var(--pil-${p.key})`:""}" aria-label="Design pillar">
+      <span class="pdot"></span>${p?esc(p.label):"tag"}
+    </button>`;
+}
+/* Inline picker, rendered under the item being tagged — same pattern as the two-tap delete,
+   so tagging never leaves the list or covers it with a sheet. */
+function pillarPicker(t){
+  return `<div class="ppick">
+    ${PILLARS.map(p=>`<button class="pchip ${t.pillar===p.key?"on":""}"
+        data-setpillar="${p.key}" data-forta="${t.id}" style="--p:var(--pil-${p.key})">
+        <span class="pdot"></span>${p.label}</button>`).join("")}
+  </div>`;
+}
+
 function emptyState(icon,title,body){
   return `<div class="empty"><div class="icon">${icon}</div><div class="t">${title}</div><div class="b">${body}</div></div>`;
 }

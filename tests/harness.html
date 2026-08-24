@@ -347,9 +347,16 @@ const g=roomById(store.rooms[0].id);
 addTask(g,"a task"); startWeek(g);
 ["rooms","spin","week","progress","settings"].forEach(t=>{
   ui.tab=t; ui.openRoomId = t==="rooms" ? g.id : null; render();
+  // A control passes if its own box is 44px tall, or if it expands its touch target with an
+  // ::after overlay (the Material pattern for chips, which are 32px by spec).
+  const effectiveHeight=el=>{
+    const own=el.getBoundingClientRect().height;
+    const after=parseFloat(getComputedStyle(el,"::after").height)||0;
+    return Math.max(own, after);
+  };
   const small=[...$main.querySelectorAll("button, input:not([type=range]), textarea")]
     .filter(el=>el.offsetParent!==null)
-    .map(el=>({el, h:el.getBoundingClientRect().height}))
+    .map(el=>({el, h:effectiveHeight(el)}))
     .filter(x=>x.h < 44)
     .map(x=>x.el.tagName.toLowerCase()+"#"+(x.el.id||"-")+"."+(x.el.className||"none")+" h="+x.h.toFixed(0));
   ok("all controls meet the 44px touch target on the "+t+" tab", small.length===0, small.join(" | "));
@@ -360,6 +367,103 @@ addTask(g,"a task"); startWeek(g);
 });
 store.week=null; ui.openRoomId=null;
 
+
+
+// ============================ design pillars ============================
+localStorage.clear(); load();
+{
+  ok("nine pillars defined", PILLARS.length===9, PILLARS.length);
+  ok("pillar keys unique", new Set(PILLARS.map(p=>p.key)).size===PILLARS.length);
+  ok("every pillar has a hint", PILLARS.every(p=>p.hint && p.hint.length>10));
+  ok("pillarBy finds and misses correctly", pillarBy("light").label==="Light" && pillarBy("nope")===null);
+
+  // The suggester runs on real wording from the actual list.
+  const cases=[["New rug","texture"],["Shades","light"],["Lighting?","light"],["Pots","greenery"],
+    ["Climbing plant?","greenery"],["Fan?","comfort"],["Bug repellent","comfort"],
+    ["Bike and golf storage","storage"],["Get toolbox from mom","storage"],["Insulation","comfort"],
+    ["Towels?","texture"],["Another thing for the candle to sit on","character"],
+    ["Table","layout"],["Horse mats","texture"],["regrout the shower","repair"]];
+  cases.forEach(([text,want])=>{
+    ok(`suggest "${text}" → ${want}`, suggestPillar(text)===want, suggestPillar(text));
+  });
+  ok("unmatched wording stays untagged", suggestPillar("Hose thing")===null, suggestPillar("Hose thing"));
+  ok("empty text is safe", suggestPillar("")===null && suggestPillar(null)===null);
+
+  const r=store.rooms[0];
+  addTask(r,"Add a floor lamp");
+  ok("added task is auto-tagged", r.tasks[0].pillar==="light", r.tasks[0].pillar);
+  addTask(r,"Hose thing");
+  ok("unmatched task is left untagged", r.tasks[1].pillar===null);
+  addTask(r,"Add a floor lamp","storage");
+  ok("an explicit pillar overrides the guess", r.tasks[2].pillar==="storage");
+
+  setTaskPillar(r, r.tasks[1].id, "comfort");
+  ok("pillar can be set by hand", r.tasks[1].pillar==="comfort");
+  setTaskPillar(r, r.tasks[1].id, "comfort");
+  ok("tapping the current tag clears it", r.tasks[1].pillar===null);
+  const beforeStamp=r.tasks[1].updatedAt;
+  setTaskPillar(r, r.tasks[1].id, "layout");
+  ok("re-tagging stamps the task so it syncs", r.tasks[1].updatedAt>=beforeStamp);
+  ok("setTaskPillar on a missing task is a no-op", (setTaskPillar(r,"nope","light"), true));
+
+  const cov=pillarCoverage(r);
+  ok("coverage has a row per pillar", cov.length===PILLARS.length);
+  ok("coverage counts items", cov.find(c=>c.pillar.key==="light").total===1, JSON.stringify(cov.find(c=>c.pillar.key==="light")));
+  ok("coverage counts done separately", cov.find(c=>c.pillar.key==="light").done===0);
+  toggleTask(r, r.tasks[0].id);
+  ok("ticking an item shows in coverage", pillarCoverage(r).find(c=>c.pillar.key==="light").done===1);
+  ok("untaggedTasks counts only untagged", untaggedTasks(r)===0, untaggedTasks(r));
+  ok("missingPillars lists the empty ones",
+     missingPillars(r).length===PILLARS.length-3, missingPillars(r).map(p=>p.key).join());
+
+  // Tagging must survive a save/load round trip and a sync merge.
+  save(); const snap=JSON.stringify(store); store=null; load();
+  ok("pillars survive reload", roomById(r.id).tasks[0].pillar==="light");
+  ok("reload is lossless with pillars", JSON.stringify(store)===snap);
+  // Look the task up by id: mergeTasks sorts its output, so positional indexing would compare
+  // whichever task happened to sort first rather than the one that was edited.
+  const other=JSON.parse(snap);
+  const roomId=store.rooms[0].id, taskId=store.rooms[0].tasks[0].id;
+  const oRoom=other.rooms.find(x=>x.id===roomId);
+  oRoom.tasks=oRoom.tasks.map(t=> t.id===taskId ? {...t, pillar:"color", updatedAt:store.clock+5000} : t);
+  const merged=mergeStores(store, other);
+  const mTask=merged.rooms.find(x=>x.id===roomId).tasks.find(t=>t.id===taskId);
+  ok("a newer pillar edit wins the merge", mTask.pillar==="color", mTask.pillar);
+  const back=mergeStores(other, store).rooms.find(x=>x.id===roomId).tasks.find(t=>t.id===taskId);
+  ok("and wins regardless of merge order", back.pillar==="color", back.pillar);
+
+  // Legacy tasks written before pillars existed must not break anything.
+  const legacy=roomById(store.rooms[1].id);
+  legacy.tasks.push({id:"old1", text:"pre-pillar item", done:false, doneAt:null, createdAt:"2026-01-01", updatedAt:0});
+  ok("a task with no pillar field reads as untagged", untaggedTasks(legacy)===1);
+  ok("coverage tolerates untagged tasks", pillarCoverage(legacy).every(c=>c.total===0));
+
+  // Render every surface that shows pillars.
+  ui.openRoomId=r.id; ui.tab="rooms"; render();
+  ok("room detail shows the coverage grid", $main.querySelectorAll("[data-pillartile]").length===PILLARS.length);
+  ok("each item shows a tag", $main.querySelectorAll("[data-pillarpick]").length===r.tasks.length);
+  ok("no template holes with pillars", !$main.innerHTML.includes("undefined"));
+  ui.pillarPickFor=r.tasks[0].id; render();
+  ok("picker opens with every pillar", $main.querySelectorAll("[data-setpillar]").length===PILLARS.length);
+  $main.querySelector('[data-setpillar="greenery"]').click();
+  ok("picking from the picker tags the item", roomById(r.id).tasks[0].pillar==="greenery");
+  ok("picking closes the picker", ui.pillarPickFor===null);
+
+  // Tapping a hollow tile pre-tags the next item added.
+  render();
+  $main.querySelector('[data-pillartile="repair"]').click();
+  ok("tapping a tile arms the prefill", ui.pillarPrefill==="repair");
+  $main.querySelector("#newTask").value="patch the drywall";
+  $main.querySelector("#addTaskBtn").click();
+  const added=roomById(r.id).tasks.find(t=>t.text==="patch the drywall");
+  ok("prefill tags the new item", added.pillar==="repair", added.pillar);
+  ok("prefill clears after use", ui.pillarPrefill===null);
+
+  ui.openRoomId=null; startWeek(roomById(r.id)); ui.tab="week"; render();
+  ok("job sheet shows the coverage grid too", $main.querySelectorAll("[data-pillartile]").length===PILLARS.length);
+  ok("job sheet items are taggable", $main.querySelectorAll("[data-pillarpick]").length>0);
+  store.week=null; ui.tab="rooms";
+}
 
 // ============================ shared house (sync) ============================
 // The merge is a pure function, so these drive it directly with two hand-built "devices"
@@ -644,7 +748,15 @@ if(ui.spin.phase==="landed"){
 resetSpin();
 
 }
-await main();
+// Surface a thrown error instead of rendering a blank page — a suite that silently prints
+// nothing is worse than one that fails loudly.
+try{ await main(); }
+catch(e){
+  document.getElementById("out").textContent =
+    log.join("\n") + "\n\nTHREW after " + log.length + " checks:\n" + (e && e.stack || e);
+  document.title="THREW";
+  throw e;
+}
 document.getElementById("out").textContent = log.join("\n")+"\n\n"+(fails?("FAILURES: "+fails):"ALL "+log.length+" CHECKS PASSED");
 document.title = fails? ("FAIL:"+fails) : "OK";
 </script></body></html>

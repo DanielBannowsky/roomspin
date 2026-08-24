@@ -61,11 +61,15 @@ function renderRoomDetail(r){
   const open=tasks.filter(t=>!t.done), done=tasks.filter(t=>t.done);
   const isWeekRoom = store.week?.roomId===r.id;
 
-  const taskRow=t=>`<div class="item ${t.done?"done":""}">
+  const taskRow=t=>`<div class="itemwrap">
+    <div class="item ${t.done?"done":""}">
       <button class="ibox" data-toggletask="${t.id}">${t.done?I.check:""}</button>
       <span class="itext">${esc(t.text)}</span>
+      ${pillarChip(t)}
       <button class="idel ${ui.confirmDelTask===t.id?"confirm":""}" data-deltask="${t.id}" aria-label="Delete item">${ui.confirmDelTask===t.id?I.check:I.trash}</button>
-    </div>`;
+    </div>
+    ${ui.pillarPickFor===t.id?pillarPicker(t):""}
+  </div>`;
 
   return `
     <button class="backbtn" id="backRooms">${I.back}All rooms</button>
@@ -88,6 +92,9 @@ function renderRoomDetail(r){
       <p class="note left">Half points count. Lower ratings get a bigger wedge on the wheel.</p>
     </div>
 
+    ${sectionLabel("Design pillars", `${pillarCoverage(r).filter(c=>c.total>0).length}/${PILLARS.length}`)}
+    ${pillarGrid(r)}
+
     ${sectionLabel("Punch list", tasks.length?`${done.length}/${tasks.length} done`:"")}
     <div class="fieldrow">
       <label class="field">
@@ -98,7 +105,8 @@ function renderRoomDetail(r){
     ${tasks.length?`
       <div class="items">${open.map(taskRow).join("")}</div>
       ${done.length?`<div class="subhead">Completed</div><div class="items">${done.map(taskRow).join("")}</div>`:""}
-    `:`<p class="note left">Nothing listed yet. Write down the specific jobs — "regrout the shower", "hang blinds" — so the week you land on this room you already know where to start.</p>`}
+    `:`<p class="note left">Nothing listed yet. Write down the specific jobs — "regrout the shower", "hang blinds" — so the week you land on this room you already know where to start. Each one gets tagged with the pillar it serves.</p>`}
+    ${untaggedTasks(r)?`<p class="note left">${untaggedTasks(r)} item${untaggedTasks(r)===1?"":"s"} untagged — tap the grey tag on a row to place it.</p>`:""}
 
     ${sectionLabel("Notes")}
     <textarea class="notes" id="roomNotes" rows="3" placeholder="Measurements, paint codes, what it would take to hit a 10…">${esc(r.notes||"")}</textarea>

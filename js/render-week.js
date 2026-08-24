@@ -18,10 +18,14 @@ function renderWeek(){
   const elapsed=clamp(dayDiff(todayStr(),w.startDate),0,len);
   const delta=r.rating-w.startRating;
 
-  const taskRow=t=>`<div class="item ${t.done?"done":""}">
+  const taskRow=t=>`<div class="itemwrap">
+    <div class="item ${t.done?"done":""}">
       <button class="ibox" data-toggletask="${t.id}">${t.done?I.check:""}</button>
       <span class="itext">${esc(t.text)}</span>
-    </div>`;
+      ${pillarChip(t)}
+    </div>
+    ${ui.pillarPickFor===t.id?pillarPicker(t):""}
+  </div>`;
 
   // Day ticks read like a strip of days on a job sheet rather than a percentage bar — you're
   // counting down actual days here, not tracking a continuous quantity.
@@ -67,6 +71,9 @@ function renderWeek(){
       ${ratingSlider(r.rating,'data-rateslider')}
       <p class="note left">Nudge it as the week goes, or leave it and set it once at sign-off.</p>
     </div>`}
+
+    ${sectionLabel("Design pillars", `${pillarCoverage(r).filter(c=>c.total>0).length}/${PILLARS.length}`)}
+    ${pillarGrid(r)}
 
     ${sectionLabel("Punch list", tasks.length?`${done}/${tasks.length} done`:"")}
     <div class="fieldrow">

@@ -19,6 +19,8 @@ const ui = {
   pendingImport:null, importError:null,
   resetConfirm:false,
   syncDraft:null,
+  pillarPickFor:null,   // task id whose pillar picker is open
+  pillarPrefill:null,   // pillar to tag the next added item with
   flash:null,
 };
 

@@ -16,6 +16,7 @@ function wire(){
     if(t!=="spin") resetSpin();
     if(t!=="rooms") ui.openRoomId=null;
     ui.confirmDelRoom=null; ui.confirmDelTask=null; ui.resetConfirm=false; ui.endWeekOpen=false;
+    ui.pillarPickFor=null; ui.pillarPrefill=null;
     ui.tab=t; render();
   });
 
@@ -38,7 +39,8 @@ function wire(){
 
   // ---- room detail ----
   const back=$("#backRooms");
-  if(back) back.onclick=()=>{ ui.openRoomId=null; ui.confirmDelRoom=null; ui.confirmDelTask=null; render(); };
+  if(back) back.onclick=()=>{ ui.openRoomId=null; ui.confirmDelRoom=null; ui.confirmDelTask=null;
+    ui.pillarPickFor=null; ui.pillarPrefill=null; render(); };
   const nameEl=$("#roomName");
   if(nameEl) nameEl.onchange=e=>{
     const r=ctxRoom(); if(!r) return;
@@ -83,11 +85,33 @@ function wire(){
   function commitNewTask(){
     const r=ctxRoom(), el=$("#newTask");
     if(!r||!el||!el.value.trim()) return;
-    addTask(r,el.value);
+    addTask(r, el.value, ui.pillarPrefill);
     ui.taskDraft[r.id]="";
+    ui.pillarPrefill=null;
     render();
     const again=$main.querySelector("#newTask"); if(again) again.focus();
   }
+  // Tapping an item's tag opens the picker under that row; tapping it again closes it.
+  all("[data-pillarpick]").forEach(b=>b.onclick=()=>{
+    const id=b.dataset.pillarpick;
+    ui.pillarPickFor = ui.pillarPickFor===id ? null : id;
+    render();
+  });
+  all("[data-setpillar]").forEach(b=>b.onclick=()=>{
+    const r=ctxRoom(); if(!r) return;
+    setTaskPillar(r, b.dataset.forta, b.dataset.setpillar);
+    ui.pillarPickFor=null;
+    render();
+  });
+  // Tapping a pillar in the coverage grid starts an item already tagged with it — the point
+  // of the grid is to surface a gap, so the tap that notices it should also begin closing it.
+  all("[data-pillartile]").forEach(b=>b.onclick=()=>{
+    const r=ctxRoom(); if(!r) return;
+    const key=b.dataset.pillartile;
+    ui.pillarPrefill = ui.pillarPrefill===key ? null : key;
+    render();
+    const box=$main.querySelector("#newTask"); if(box) box.focus();
+  });
   all("[data-toggletask]").forEach(b=>b.onclick=()=>{
     const r=ctxRoom(); if(!r) return;
     toggleTask(r,b.dataset.toggletask); render();
