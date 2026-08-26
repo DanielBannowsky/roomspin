@@ -27,48 +27,80 @@ const BIAS_LEVELS = [
   {v:3, label:"Harsh",  sub:"worst room dominates"},
 ];
 
-/* The design pillars a punch-list item can be tagged with. One shared vocabulary for inside
-   and outside deliberately: a patio needs light, texture and greenery for the same reasons a
-   living room does, and a second set of exterior-only names would just make the coverage view
-   incomparable between rooms.
+/* ============================ design pillars ============================
+   Finalised after three independent design reviews — a practising designer, a design educator
+   and an architect — each asked the same question: is this set SUFFICIENT? All three said the
+   old nine were not, and all three found the same hole by the same route: every item this
+   house had failed to tag (Steps, Hose thing, Dumbbells, Baking soda, Scratching stuff) was
+   something the room needs to DO ITS JOB, and no pillar covered that. The set described how a
+   room looks, not whether it works. Hence `function`.
 
-   The point isn't the tag, it's the coverage. A room reads as finished when several pillars
-   are handled at once — good light on a bare, hard-surfaced room still feels unfinished — so
-   the room view shows which pillars have nothing against them. `repair` is the odd one out and
-   sits last on purpose: it isn't a design pillar, it's the baseline, and nothing else in a
-   room reads properly while something is visibly broken. */
+   Level of abstraction, and every member obeys it: A PILLAR IS A CLASS OF JOB YOU CAN SHOP FOR
+   OR SCHEDULE. Not a property, not an outcome, not a component. `character` failed that test
+   (an outcome — it's what you get, not what you buy) and became `art`; the old `comfort`
+   failed it too (a feeling) and is now only the invisible environment.
+
+   Tag by what an item is FOR, not what it's made of: a curtain is Light, a cushion is
+   Textiles, a fan is Comfort. If two still fit, tag the one the room has nothing against yet.
+
+   WHAT COVERAGE MEANS — all three reviewers were emphatic, so it's written here rather than
+   left to be re-litigated: covering every pillar does NOT mean the room is good. "Light: done"
+   and "Light: three layers at three heights" are the same tag, so ten pillars closed by one
+   cheap item each proves nothing. Coverage is a breadth signal: it means nothing has been
+   FORGOTTEN. The 0-10 rating stays the verdict on quality. Do not let the grid impersonate the
+   rating — that conflation is what turned the old `comfort` into a junk drawer.
+
+   Order is the order you'd work in — shell, then use, then the layers on top — so the list
+   itself teaches sequence. `repair` moved from last to first for the same reason: it read as
+   least important sitting at the end, when it's the prerequisite. */
 const PILLARS = [
-  {key:"light",     label:"Light",     hint:"Layer it — ambient, task, accent. Daylight counts."},
-  {key:"color",     label:"Color",     hint:"Paint and palette. Pick a few tones and repeat them."},
-  {key:"texture",   label:"Texture",   hint:"Mix hard and soft — rug, wood, linen, stone."},
-  {key:"layout",    label:"Layout",    hint:"Zones and flow. What faces what, how you move through."},
-  {key:"storage",   label:"Storage",   hint:"Everything needs a home. Clutter always reads as low."},
-  {key:"greenery",  label:"Greenery",  hint:"Something alive — plants, herbs, cut stems."},
-  {key:"character", label:"Character", hint:"Art, objects, things with a story. The personal layer."},
-  {key:"comfort",   label:"Comfort",   hint:"Temperature, airflow, sound, scent, softness underfoot."},
-  {key:"repair",    label:"Repair",    hint:"Fix what's broken or unfinished. The baseline, not a flourish."},
+  {key:"repair",   label:"Repair",        hint:"Fix what's broken, unfinished or grubby. Do this first — nothing else reads right until it is."},
+  {key:"surfaces", label:"Surfaces",      hint:"The fixed planes — floor, walls, ceiling, counters. Paint, paper, tile, flooring."},
+  {key:"light",    label:"Light",         hint:"Layer it: ambient, task, accent. Daylight and blinds count — and go look after dark."},
+  {key:"function", label:"Function",      hint:"Can the room do its job? The furniture, fixtures and power it needs to work."},
+  {key:"layout",   label:"Layout",        hint:"Where everything goes. Zones, flow, what faces what, and where the edges are."},
+  {key:"storage",  label:"Storage",       hint:"Everything needs a home — or needs to go. Clutter always reads as low."},
+  {key:"comfort",  label:"Comfort",       hint:"The invisible half — warmth, airflow, quiet, smell, bugs. What you feel before you look."},
+  {key:"textiles", label:"Textiles",      hint:"The soft layer — rug, curtains, cushions, bedding, towels. Bare hard rooms never rate."},
+  {key:"greenery", label:"Greenery",      hint:"Something alive — pots, beds, herbs, cut stems, the view out the window."},
+  {key:"art",      label:"Art & objects", hint:"Walls and shelves — art, photos, mirrors, the things with a story."},
 ];
 const pillarBy = k => PILLARS.find(p=>p.key===k) || null;
 
-/* Keyword → pillar, tried in order so the more specific rule wins ("paint" is colour even
-   though a paint job is also a repair). Only ever a suggestion: it pre-selects a tag when you
-   add an item and you can change it with one tap. Anything unmatched stays untagged rather
-   than being forced into a pillar it doesn't belong in. */
+/* Keys from before the rebuild. Fallback only — an item's own text is a better guide than its
+   old bucket, because `texture` alone splits three ways (soft goods, fixed planes, storage). */
+const PILLAR_LEGACY = {
+  color:"surfaces", texture:"textiles", character:"art",
+  light:"light", layout:"layout", storage:"storage", greenery:"greenery",
+  comfort:"comfort", repair:"repair",
+};
+
+/* Keyword → pillar, in order so the more specific rule wins. Two rules moved deliberately:
+   shelf/shelves left `texture` for `storage`, and the furniture nouns left `layout` for
+   `function`, leaving layout the verbs (arrange, zone, screen) rather than the nouns. */
 const PILLAR_HINTS = [
-  ["repair",    /\b(fix|repair|patch|seal|caulk|foam|broken|leak|crack|rot|sand|regrout|grout|replace)\b/i],
-  ["light",     /\b(lights?|lighting|lamps?|sconces?|bulbs?|dimmers?|lanterns?|shades?|blinds?|skylights?|windows?)\b/i],
-  ["color",     /\b(paint|colou?r|wallpaper|stain|whitewash)\b/i],
-  ["greenery",  /\b(plants?|pots?|planters?|trees?|flowers?|garden|herbs?|climbing|moss|shrubs?)\b/i],
-  ["storage",   /\b(storage|store|shelf|shelving|shelves|cabinets?|bins?|baskets?|hooks?|closets?|organi[sz]e|toolbox|racks?|drawers?|pegboard)\b/i],
-  ["comfort",   /\b(fan|heater|heat|insulation|ac|a\/c|air|airflow|bug|repellent|mosquito|sound|speaker|scent|diffuser|cushion|breeze|shade cloth)\b/i],
-  ["texture",   /\b(rugs?|towels?|linen|throws?|pillows?|blankets?|mats?|fabric|upholster|curtains?|tile|wood|stone)\b/i],
-  ["character", /\b(art|photo|frame|print|poster|candle|book|books|decor|mirror|vase|shelf styling)\b/i],
-  ["layout",    /\b(tables?|chairs?|sofas?|couch(es)?|desks?|bench(es)?|stools?|beds?|arrange|layout|furniture|seating|dining|eat|eating)\b/i],
+  ["repair",    /\b(fix|repair|patch|seal|caulk|foam|broken|leaks?|cracks?|rot|sand|regrout|grout|unsafe|grubby)\b/i],
+  ["light",     /\b(lights?|lighting|lamps?|sconces?|bulbs?|dimmers?|lanterns?|pendant|chandelier|blinds?|shades?|shutters?|skylights?)\b/i],
+  ["surfaces",  /\b(paint|repaint|wallpaper|stain|limewash|whitewash|tile|tiling|flooring|floors?|ceilings?|walls?|counters?|countertop|trim|plaster|drywall|pavers?|gravel|decking|concrete)\b/i],
+  ["greenery",  /\b(plants?|pots?|planters?|trees?|flowers?|garden|herbs?|beds?|climbing|moss|shrubs?|mulch|lawn)\b/i],
+  ["storage",   /\b(storage|store|shelf|shelving|shelves|cabinets?|cupboards?|bins?|baskets?|hooks?|closets?|organi[sz]e|racks?|drawers?|pegboard|declutter|clear|cull|donate|get rid|take out|containers?|jars?)\b/i],
+  ["comfort",   /\b(fans?|heater|heating|insulation|ac|a\/c|air|airflow|vent|draughts?|drafts?|damp|bugs?|repellent|mosquito|pest|sound|noise|echo|speakers?|scent|smell|odou?r|breeze|baking soda)\b/i],
+  ["textiles",  /\b(rugs?|runners?|towels?|linen|throws?|pillows?|cushions?|blankets?|bedding|curtains?|drapes?|fabric|upholster|mats?)\b/i],
+  ["art",       /\b(art|artwork|photos?|frames?|framed|prints?|posters?|candles?|decor|mirrors?|vases?|books?|objects?)\b/i],
+  ["function",  /\b(tables?|chairs?|sofas?|couch(es)?|desks?|bench(es)?|stools?|beds?|furniture|outlets?|sockets?|power|hose|spigot|tap|irrigation|steps?|handrail|bar|rail|equipment|dumbbells?|weights?|litter|scratching|feeder|tools?|toolbox|appliance|dining|eat|eating|cooking|laundry)\b/i],
+  ["layout",    /\b(arrange|rearrange|move|face|facing|zone|flow|screen|screening|privacy|fence|hedge|edges?|layout|seating plan)\b/i],
 ];
+/* Best match rather than first match: "paint the ceiling and touch up around the fan" hits
+   `surfaces` twice and `comfort` once, and first-match handed it to whichever rule sat higher.
+   Counting lets the rule with more evidence win; order only settles genuine ties. */
 function suggestPillar(text){
   const t=String(text||"");
-  for(const [key,re] of PILLAR_HINTS) if(re.test(t)) return key;
-  return null;
+  let best=null, bestHits=0;
+  PILLAR_HINTS.forEach(([key,re])=>{
+    const hits=(t.match(new RegExp(re.source,"gi"))||[]).length;
+    if(hits>bestHits){ best=key; bestHits=hits; }
+  });
+  return best;
 }
 
 /* Seeded on first run so the app is usable immediately — every one of these is editable and

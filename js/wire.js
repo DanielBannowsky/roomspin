@@ -105,6 +105,12 @@ function wire(){
   });
   // Tapping a pillar in the coverage grid starts an item already tagged with it — the point
   // of the grid is to surface a gap, so the tap that notices it should also begin closing it.
+  all("[data-natoggle]").forEach(b=>b.onclick=()=>{
+    const r=ctxRoom(); if(!r) return;
+    togglePillarNA(r, b.dataset.natoggle);
+    if(ui.pillarPrefill===b.dataset.natoggle) ui.pillarPrefill=null;
+    render();
+  });
   all("[data-pillartile]").forEach(b=>b.onclick=()=>{
     const r=ctxRoom(); if(!r) return;
     const key=b.dataset.pillartile;

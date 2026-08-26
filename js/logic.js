@@ -112,7 +112,7 @@ const weekIsOver = () => store.week ? weekDaysLeft() <= 0 : false;
 function addRoom(name){
   const n=name.trim(); if(!n) return null;
   const room={id:uid(), name:n, rating:5, tasks:[], notes:"",
-    snoozed:false, createdAt:todayStr(), ratingLog:[{date:todayStr(), rating:5}], updatedAt:stamp()};
+    snoozed:false, naPillars:[], createdAt:todayStr(), ratingLog:[{date:todayStr(), rating:5}], updatedAt:stamp()};
   store.rooms.push(room); save(); return room;
 }
 function deleteRoom(id){
@@ -166,9 +166,23 @@ function deleteTask(room,taskId){
 /* Which pillars this room has any item against, and which it has *finished*. The gap between
    "nothing here" and "handled" is the whole point of the view: a room with eight storage items
    and no light isn't eight-ninths of the way to a ten, it's a well-organised dim room. */
+/* Pillars this room is actually judged against. Greenery in the pantry, art in the master
+   closet, textiles on the stairs — a tile that can never be filled teaches you to ignore hollow
+   tiles, which destroys the only signal the grid produces. All three reviewers raised this
+   independently and called it required, not optional: going 9 -> 10 without it makes the app
+   worse, because there are simply more tiles to nag with. */
+const naPillars = room => Array.isArray(room.naPillars) ? room.naPillars : [];
+const pillarsFor = room => PILLARS.filter(p=>!naPillars(room).includes(p.key));
+function togglePillarNA(room,key){
+  const list=naPillars(room);
+  room.naPillars = list.includes(key) ? list.filter(k=>k!==key) : [...list, key];
+  touchRoom(room);
+  save();
+}
+
 function pillarCoverage(room){
   const tasks=room.tasks||[];
-  return PILLARS.map(p=>{
+  return pillarsFor(room).map(p=>{
     const mine=tasks.filter(t=>t.pillar===p.key);
     return {pillar:p, total:mine.length, done:mine.filter(t=>t.done).length};
   });
@@ -176,6 +190,8 @@ function pillarCoverage(room){
 const untaggedTasks = room => (room.tasks||[]).filter(t=>!t.pillar).length;
 /* Pillars with nothing at all against them — the prompt for "what would take this to a ten?" */
 const missingPillars = room => pillarCoverage(room).filter(c=>c.total===0).map(c=>c.pillar);
+const coveredCount = room => pillarCoverage(room).filter(c=>c.total>0).length;
+const pillarTotal  = room => pillarsFor(room).length;
 
 const openTasks = room => (room.tasks||[]).filter(t=>!t.done).length;
 const doneTasks = room => (room.tasks||[]).filter(t=>t.done).length;

@@ -68,6 +68,10 @@ function normalizeStore(){
     if(!Array.isArray(r.tasks)) r.tasks=[];
     if(!Array.isArray(r.ratingLog)) r.ratingLog=[{date:r.createdAt||todayStr(), rating:r.rating??5}];
     r.rating=snapRating(r.rating);
+    if(!Array.isArray(r.naPillars)) r.naPillars=[];
+    // Carry tags across the pillar rebuild. The item's own TEXT is tried first because the old
+    // buckets don't map cleanly — `texture` alone splits into textiles, surfaces and storage.
+    r.tasks.forEach(t=>{ if(t.pillar && !pillarBy(t.pillar)) t.pillar=migratePillar(t); });
     // Rooms and tasks written before sync existed have no stamp; treat them as oldest-known
     // rather than newest, so a genuine edit on the other device always wins over dormant data.
     if(typeof r.updatedAt!=="number") r.updatedAt=0;
@@ -84,12 +88,18 @@ function normalizeStore(){
   store.clock=Math.max(hi, store.settingsUpdatedAt||0, store.weekUpdatedAt||0);
 }
 
+function migratePillar(task){
+  const k=task.pillar;
+  if(!k || pillarBy(k)) return k || null;          // untagged, or already a current pillar
+  return suggestPillar(task.text) || PILLAR_LEGACY[k] || null;
+}
+
 /* First-run seed. Marked with a `seeded` flag rather than keyed off an empty room list, so a
    user who deliberately deletes every room doesn't get the starter set pushed back at them. */
 function seedRooms(){
   STARTER_ROOMS.forEach(n=>{
     store.rooms.push({id:uid(), name:n, rating:5, tasks:[], notes:"",
-      snoozed:false, createdAt:todayStr(), ratingLog:[{date:todayStr(), rating:5}], updatedAt:0});
+      snoozed:false, naPillars:[], createdAt:todayStr(), ratingLog:[{date:todayStr(), rating:5}], updatedAt:0});
   });
   store.seeded=true;
   save();

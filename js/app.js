@@ -82,27 +82,41 @@ function ratingSlider(val,attr){
     </div>`;
 }
 /* ---- design pillars ---- */
-/* Coverage grid. Filled = has items, ticked = all of them done, hollow = nothing here yet.
-   Tapping a hollow one starts an item already tagged with it, which is the fastest path from
-   "this room feels unfinished" to actually writing down why. */
+/* Coverage grid. Each tile carries a COUNT, never a tick — "Light: 1" and "Light: 4" are very
+   different rooms and the old "done" label flattened them. Covering every pillar means nothing
+   has been forgotten; it does not mean the room is good, and the copy below says so, because
+   all three reviewers warned that letting the grid impersonate the rating is exactly how the
+   old `comfort` became a junk drawer.
+
+   Tapping a tile starts an item already tagged with it. The small x marks a pillar as not
+   applicable to this room, so the pantry stops asking for a houseplant forever. */
 function pillarGrid(room){
   const cov=pillarCoverage(room);
   const covered=cov.filter(c=>c.total>0).length;
+  const total=pillarTotal(room);
+  const na=naPillars(room);
   return `
     <div class="pgrid">
       ${cov.map(c=>{
-        const state = c.total===0 ? "none" : (c.done===c.total ? "done" : "some");
-        return `<button class="ptile ${state}" data-pillartile="${c.pillar.key}"
-                  style="--p:var(--pil-${c.pillar.key})" title="${esc(c.pillar.hint)}">
-          <span class="pdot"></span>
-          <span class="plab">${c.pillar.label}</span>
-          <span class="pcount">${c.total? (c.done===c.total?"done":`${c.done}/${c.total}`) : "—"}</span>
-        </button>`;
+        const open=c.total-c.done;
+        return `<div class="ptile ${c.total?"some":"none"} ${ui.pillarPrefill===c.pillar.key?"armed":""}"
+                  style="--p:var(--pil-${c.pillar.key})">
+          <button class="ptap" data-pillartile="${c.pillar.key}" title="${esc(c.pillar.hint)}">
+            <span class="pdot"></span>
+            <span class="plab">${c.pillar.label}</span>
+            <span class="pcount">${c.total? `${c.total}${open?"":" ✓"}` : "—"}</span>
+          </button>
+          ${c.total?"":`<button class="pna" data-natoggle="${c.pillar.key}" aria-label="Not for this room">✕</button>`}
+        </div>`;
       }).join("")}
     </div>
-    <p class="note left">${covered===PILLARS.length
-      ? "Every pillar has something against it — that's what makes a room read as finished."
-      : `${covered}/${PILLARS.length} pillars covered. Tap a hollow one to add something for it.`}</p>`;
+    ${na.length?`<div class="narow">
+      <span class="slab">Not for this room</span>
+      ${na.map(k=>{const p=pillarBy(k); return p?`<button class="pchip" data-natoggle="${k}">${esc(p.label)} <em>put back</em></button>`:"";}).join("")}
+    </div>`:""}
+    <p class="note left">${covered===total
+      ? "Nothing forgotten — every pillar has something against it. Whether the room is <em>good</em> is what the rating is for."
+      : `${covered}/${total} pillars have something against them. Tap one to add an item, or ✕ if it doesn't apply here.`}</p>`;
 }
 /* The tag shown on a punch-list item. It's a button: tapping opens the picker for that item. */
 function pillarChip(t){

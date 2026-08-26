@@ -92,7 +92,7 @@ function renderRoomDetail(r){
       <p class="note left">Half points count. Lower ratings get a bigger wedge on the wheel.</p>
     </div>
 
-    ${sectionLabel("Design pillars", `${pillarCoverage(r).filter(c=>c.total>0).length}/${PILLARS.length}`)}
+    ${sectionLabel("Design pillars", `${coveredCount(r)}/${pillarTotal(r)}`)}
     ${pillarGrid(r)}
 
     ${sectionLabel("Punch list", tasks.length?`${done.length}/${tasks.length} done`:"")}

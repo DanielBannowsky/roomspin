@@ -58,23 +58,39 @@ weighting — a 6.5 sits properly between a 6 and a 7 on the wheel.
 
 ## Design pillars
 
-Every punch-list item can be tagged with one of nine pillars — **light, color, texture,
-layout, storage, greenery, character, comfort, repair**. One vocabulary covers inside and out
-on purpose: a patio needs light, texture and greenery for the same reasons a living room does,
-and a separate exterior set would make coverage incomparable between rooms.
+Every to-do item is tagged with one of ten pillars — **Repair, Surfaces, Light, Function,
+Layout, Storage, Comfort, Textiles, Greenery, Art & objects** — and each room shows which have
+nothing against them yet.
 
-The tag isn't the point, the **coverage** is. A room reads as finished when several pillars are
-handled at once — good lighting in a bare, hard-surfaced room still feels unfinished — so the
-room and job views show a nine-tile grid with the empty pillars hollow. That's the prompt for
-"what would actually take this to a ten?". Tapping a hollow tile starts an item already tagged
-with it.
+The set was finalised by three independent design reviews (a practising designer, a design
+educator and an architect) asked one question: is it *sufficient*? All three said the previous
+nine were not, and all three found the same hole the same way — every item this house had
+failed to tag (Steps, Hose thing, Dumbbells, Baking soda, Scratching stuff) was something the
+room needs to **do its job**, and no pillar covered that. The old set described how a room
+looks, not whether it works. Hence `Function`.
 
-`repair` sits last deliberately. It isn't a design pillar, it's the baseline: nothing else in a
-room reads properly while something is visibly broken.
+The rule every member obeys: **a pillar is a class of job you can shop for or schedule.** Not a
+property, not an outcome, not a component. `Character` failed it (an outcome — it's what you
+get, not what you buy) and became `Art & objects`; the old `Comfort` failed it too (a feeling)
+and is now only the invisible environment — warmth, air, quiet, smell, bugs.
 
-Items are auto-tagged from their wording as you type them (`suggestPillar` in
-`js/constants.js`), and one tap changes it. Anything the keywords don't recognise stays
-untagged rather than being forced into a pillar it doesn't belong in.
+Tag by what an item is *for*, not what it's made of: a curtain is Light, a cushion is Textiles,
+a fan is Comfort.
+
+**What coverage means, and what it does not.** All three reviewers were emphatic about this, so
+it is worth stating plainly: covering every pillar does **not** mean the room is good. "Light:
+done" and "Light: three layers at three heights" are the same tag, so ten pillars closed by one
+cheap item each proves nothing. Coverage is a breadth signal — it means nothing has been
+*forgotten*. The 0-10 rating remains the verdict on quality, and the app's copy says so.
+
+Scale, focal point and balance are deliberately **not** pillars. You cannot write "buy scale";
+they are properties of a finished room rather than jobs, and as tiles they would sit
+permanently hollow.
+
+**"Not for this room."** Greenery in the pantry, art in the master closet, textiles on the
+stairs — a tile that can never be filled teaches you to ignore hollow tiles, which destroys the
+only signal the grid produces. Tap the ✕ on an empty pillar to drop it for that room; the
+denominator shrinks with it.
 
 ## Sharing a house between two people
 

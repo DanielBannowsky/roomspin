@@ -72,7 +72,7 @@ function renderWeek(){
       <p class="note left">Nudge it as the week goes, or leave it and set it once at sign-off.</p>
     </div>`}
 
-    ${sectionLabel("Design pillars", `${pillarCoverage(r).filter(c=>c.total>0).length}/${PILLARS.length}`)}
+    ${sectionLabel("Design pillars", `${coveredCount(r)}/${pillarTotal(r)}`)}
     ${pillarGrid(r)}
 
     ${sectionLabel("Punch list", tasks.length?`${done}/${tasks.length} done`:"")}
